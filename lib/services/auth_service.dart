@@ -1,0 +1,398 @@
+import '../models/user.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+/// 인증 관련 서비스 클래스
+class AuthService {
+  // 싱글턴 패턴 구현
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
+  // Firebase 인스턴스
+  final firebase_auth.FirebaseAuth _firebaseAuth =
+      firebase_auth.FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // 현재 로그인한 사용자
+  User? _currentUser;
+
+  // 현재 사용자 getter
+  User? get currentUser => _currentUser;
+
+  // 로그인 상태 확인
+  bool get isLoggedIn => _currentUser != null;
+
+  // 사용자 상태 스트림
+  Stream<User?> get userStream {
+    return _firebaseAuth.authStateChanges().asyncMap((firebaseUser) async {
+      if (firebaseUser == null) {
+        _currentUser = null;
+        return null;
+      }
+
+      // Firestore에서 사용자 정보 가져오기
+      try {
+        final doc =
+            await _firestore.collection('users').doc(firebaseUser.uid).get();
+        if (doc.exists) {
+          final userData = doc.data()!;
+
+          _currentUser = User(
+            id: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            username: userData['username'] ?? '',
+            name: userData['name'] ?? '',
+            profileImageUrl: userData['profileImageUrl'],
+            createdAt: (userData['createdAt'] as Timestamp).toDate(),
+            pulseIds: List<String>.from(userData['pulseIds'] ?? []),
+            bookmarkedPulseIds: List<String>.from(
+              userData['bookmarkedPulseIds'] ?? [],
+            ),
+          );
+
+          return _currentUser;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('사용자 데이터 로드 오류: $e');
+        }
+      }
+
+      _currentUser = null;
+      return null;
+    });
+  }
+
+  // 로그인 메서드
+  Future<void> login({required String email, required String password}) async {
+    try {
+      if (kDebugMode) {
+        print('로그인 시도: $email');
+      }
+
+      // Firebase 인증으로 로그인
+      final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (kDebugMode) {
+        print('Firebase 로그인 성공: ${userCredential.user?.uid}');
+      }
+
+      if (userCredential.user == null) {
+        throw Exception('로그인 실패: 사용자 정보를 찾을 수 없습니다');
+      }
+
+      // Firestore에서 사용자 정보 가져오기
+      if (kDebugMode) {
+        print('Firestore에서 사용자 정보 조회 시도');
+      }
+
+      final userDoc =
+          await _firestore
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .get();
+
+      if (!userDoc.exists) {
+        throw Exception('로그인 실패: 사용자 프로필을 찾을 수 없습니다');
+      }
+
+      final userData = userDoc.data() as Map<String, dynamic>;
+
+      if (kDebugMode) {
+        print('Firestore 사용자 데이터: $userData');
+      }
+
+      // User 모델로 변환
+      _currentUser = User.fromJson(userData);
+
+      if (kDebugMode) {
+        print('로그인 완료: ${_currentUser?.username}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('로그인 오류: $e');
+        print('오류 세부 정보: ${e.runtimeType}, ${e.toString()}');
+
+        if (e is Error) {
+          print('스택 트레이스: ${e.stackTrace}');
+        }
+      }
+
+      if (e.toString().contains('user-not-found')) {
+        throw Exception('등록되지 않은 이메일입니다');
+      } else if (e.toString().contains('wrong-password')) {
+        throw Exception('비밀번호가 올바르지 않습니다');
+      } else if (e.toString().contains('invalid-email')) {
+        throw Exception('유효하지 않은 이메일 형식입니다');
+      } else if (e.toString().contains('user-disabled')) {
+        throw Exception('비활성화된 계정입니다');
+      } else if (e.toString().contains('too-many-requests')) {
+        throw Exception('너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요');
+      } else {
+        throw Exception('로그인 실패: ${e.toString()}');
+      }
+    }
+  }
+
+  // 회원가입 메서드
+  Future<void> register({
+    required String email,
+    required String username,
+    required String password,
+    required String name,
+  }) async {
+    try {
+      if (kDebugMode) {
+        print('회원가입 시작: $email, $username');
+      }
+
+      // 사용자 이름 중복 확인
+      final usernameQuery =
+          await _firestore
+              .collection('users')
+              .where('username', isEqualTo: username)
+              .get();
+
+      if (usernameQuery.docs.isNotEmpty) {
+        throw Exception('이미 사용 중인 사용자 이름입니다');
+      }
+
+      // Firebase 인증으로 사용자 생성
+      if (kDebugMode) {
+        print('Firebase 인증 사용자 생성 시도');
+      }
+
+      final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (kDebugMode) {
+        print('Firebase 인증 사용자 생성 완료: ${userCredential.user?.uid}');
+      }
+
+      if (userCredential.user == null) {
+        throw Exception('회원가입 실패: 사용자 정보를 생성할 수 없습니다');
+      }
+
+      // 생성 시간
+      final now = DateTime.now();
+
+      // 사용자 데이터 생성
+      final userData = {
+        'id': userCredential.user!.uid,
+        'email': email,
+        'username': username,
+        'name': name,
+        'profileImageUrl': null,
+        'createdAt': Timestamp.fromDate(now),
+        'pulseIds': <String>[],
+        'bookmarkedPulseIds': <String>[],
+        'reputation': 0,
+      };
+
+      if (kDebugMode) {
+        print('Firestore에 사용자 정보 저장 시도');
+      }
+
+      // Firestore에 사용자 정보 저장
+      await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set(userData);
+
+      if (kDebugMode) {
+        print('Firestore에 사용자 정보 저장 완료');
+      }
+
+      // 현재 사용자 정보 업데이트
+      _currentUser = User(
+        id: userCredential.user!.uid,
+        email: email,
+        username: username,
+        name: name,
+        profileImageUrl: null,
+        createdAt: now,
+        pulseIds: [],
+        bookmarkedPulseIds: [],
+        reputation: 0,
+      );
+
+      if (kDebugMode) {
+        print('회원가입 완료: ${_currentUser?.id}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('회원가입 오류: $e');
+        print('오류 세부 정보: ${e.runtimeType}, ${e.toString()}');
+
+        if (e is Error) {
+          print('스택 트레이스: ${e.stackTrace}');
+        }
+      }
+      if (e.toString().contains('email-already-in-use')) {
+        throw Exception('이미 사용 중인 이메일입니다');
+      }
+      throw Exception('회원가입 실패: ${e.toString()}');
+    }
+  }
+
+  // 비밀번호 재설정 메서드
+  Future<void> resetPassword({required String email}) async {
+    await Future.delayed(const Duration(seconds: 1));
+
+    // 여기서는 데모를 위해 성공 시나리오를 시뮬레이션합니다
+    if (kDebugMode) {
+      print('비밀번호 재설정 이메일이 $email로 전송되었습니다');
+    }
+    return;
+  }
+
+  // 로그아웃 메서드
+  Future<void> logout() async {
+    try {
+      await _firebaseAuth.signOut();
+      _currentUser = null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('로그아웃 오류: $e');
+      }
+      throw Exception('로그아웃 실패: ${e.toString()}');
+    }
+  }
+
+  // 프로필 업데이트
+  Future<void> updateProfile({
+    String? username,
+    String? profileImageUrl,
+  }) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user == null || _currentUser == null) {
+        throw Exception('로그인되어 있지 않습니다');
+      }
+
+      // 업데이트할 데이터
+      final Map<String, dynamic> updates = {};
+
+      if (username != null && username != _currentUser!.username) {
+        // 사용자 이름 중복 확인
+        final usernameQuery =
+            await _firestore
+                .collection('users')
+                .where('username', isEqualTo: username)
+                .get();
+
+        if (usernameQuery.docs.isNotEmpty) {
+          throw Exception('이미 사용 중인 사용자 이름입니다');
+        }
+
+        updates['username'] = username;
+      }
+
+      if (profileImageUrl != null) {
+        updates['profileImageUrl'] = profileImageUrl;
+      }
+
+      if (updates.isNotEmpty) {
+        // Firestore 업데이트
+        await _firestore.collection('users').doc(user.uid).update(updates);
+
+        // 현재 사용자 정보 업데이트
+        _currentUser = _currentUser!.copyWith(
+          username: username ?? _currentUser!.username,
+          profileImageUrl: profileImageUrl ?? _currentUser!.profileImageUrl,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('프로필 업데이트 오류: $e');
+      }
+      throw Exception('프로필 업데이트 실패: ${e.toString()}');
+    }
+  }
+
+  // 비밀번호 변경 메서드
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user == null) {
+        throw Exception('로그인되어 있지 않습니다');
+      }
+
+      // 현재 비밀번호 확인을 위해 재인증
+      final credential = firebase_auth.EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+
+      // 비밀번호 변경
+      await user.updatePassword(newPassword);
+    } catch (e) {
+      if (kDebugMode) {
+        print('비밀번호 변경 오류: $e');
+      }
+      if (e is firebase_auth.FirebaseAuthException) {
+        if (e.code == 'wrong-password') {
+          throw Exception('현재 비밀번호가 올바르지 않습니다');
+        }
+      }
+      throw Exception('비밀번호 변경 실패: ${e.toString()}');
+    }
+  }
+
+  // 계정 삭제 메서드
+  Future<void> deleteAccount({required String password}) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user == null) {
+        throw Exception('로그인되어 있지 않습니다');
+      }
+
+      // 재인증
+      final credential = firebase_auth.EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+
+      // Firestore에서 사용자 데이터 삭제
+      await _firestore.collection('users').doc(user.uid).delete();
+
+      // Firebase Auth에서 사용자 삭제
+      await user.delete();
+
+      _currentUser = null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('계정 삭제 오류: $e');
+      }
+      if (e is firebase_auth.FirebaseAuthException) {
+        if (e.code == 'wrong-password') {
+          throw Exception('비밀번호가 올바르지 않습니다');
+        }
+      }
+      throw Exception('계정 삭제 실패: ${e.toString()}');
+    }
+  }
+
+  // Mock 사용자 로드 (개발 환경 전용)
+  void loadMockUsers() {
+    if (kDebugMode) {
+      print('개발용 Mock 사용자 데이터 로드');
+    }
+
+    // Firebase 연동 후에는 이 메서드 사용 중단
+  }
+}
