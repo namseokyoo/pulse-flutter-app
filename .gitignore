@@ -46,3 +46,9 @@ app.*.map.json
 
 # 개발 로그 파일 (깃허브에 업로드되지 않도록)
 dev_log.md
+
+# Firebase 설정 파일 (보안을 위해 제외)
+**/google-services.json
+**/*firebase*.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
