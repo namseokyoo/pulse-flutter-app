@@ -20,6 +20,8 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
   Pulse? _pulse;
   List<Comment> _comments = [];
   bool _isLoading = true;
+  bool _isVoting = false;
+  bool _isSubmittingComment = false;
 
   // 댓글 입력
   final TextEditingController _commentController = TextEditingController();
@@ -38,121 +40,145 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
     super.dispose();
   }
 
-  void _loadPulseData() {
+  // 펄스 데이터 로드
+  Future<void> _loadPulseData() async {
     setState(() {
       _isLoading = true;
     });
 
-    // 펄스 데이터 로드
-    final pulse = _pulseService.getPulseById(widget.pulseId);
-    if (pulse == null) {
-      // 데이터가 없는 경우 처리
-      setState(() {
-        _isLoading = false;
-      });
-      return;
+    try {
+      // 펄스 데이터 로드
+      final pulse = await _pulseService.getPulseById(widget.pulseId);
+      if (pulse == null) {
+        // 데이터가 없는 경우 처리
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // 댓글 데이터 로드
+      final comments = await _pulseService.getCommentsForPulse(widget.pulseId);
+
+      if (mounted) {
+        setState(() {
+          _pulse = pulse;
+          _comments = comments;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('펄스 데이터 로드 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
-
-    // 댓글 데이터 로드
-    final comments = _pulseService.getCommentsForPulse(widget.pulseId);
-
-    setState(() {
-      _pulse = pulse;
-      _comments = comments;
-      _isLoading = false;
-    });
   }
 
   // 좋아요 버튼 클릭 처리
-  void _handleUpvote() {
+  Future<void> _handleUpvote() async {
     final authService = AuthService();
-
-    // 로그인 확인
     if (!authService.isLoggedIn) {
-      _showLoginRequiredDialog('좋아요');
+      _showLoginRequiredDialog();
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _isVoting = true;
     });
 
-    // 펄스 좋아요 처리
-    final updatedPulse = _pulseService.upvotePulse(_pulse!.id);
-    setState(() {
-      _pulse = updatedPulse;
-      _isLoading = false;
-    });
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('좋아요! 펄스 시간이 30분 연장되었습니다.')));
+    try {
+      final updatedPulse = await _pulseService.upvotePulse(_pulse!.id);
+      if (updatedPulse != null && mounted) {
+        setState(() {
+          _pulse = updatedPulse;
+          _isVoting = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('좋아요 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isVoting = false;
+        });
+      }
+    }
   }
 
   // 싫어요 버튼 클릭 처리
-  void _handleDownvote() {
+  Future<void> _handleDownvote() async {
     final authService = AuthService();
-
-    // 로그인 확인
     if (!authService.isLoggedIn) {
-      _showLoginRequiredDialog('싫어요');
+      _showLoginRequiredDialog();
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _isVoting = true;
     });
 
-    // 펄스 싫어요 처리
-    final updatedPulse = _pulseService.downvotePulse(_pulse!.id);
-    setState(() {
-      _pulse = updatedPulse;
-      _isLoading = false;
-    });
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('싫어요! 펄스 시간이 30분 단축되었습니다.')));
+    try {
+      final updatedPulse = await _pulseService.downvotePulse(_pulse!.id);
+      if (updatedPulse != null && mounted) {
+        setState(() {
+          _pulse = updatedPulse;
+          _isVoting = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('싫어요 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isVoting = false;
+        });
+      }
+    }
   }
 
-  // 댓글 추가 처리
-  void _handleAddComment() {
+  // 댓글 작성 처리
+  Future<void> _submitComment() async {
+    if (_commentController.text.trim().isEmpty) {
+      return;
+    }
+
     final authService = AuthService();
-
-    // 로그인 확인
     if (!authService.isLoggedIn) {
-      _showLoginRequiredDialog('댓글 작성');
-      return;
-    }
-
-    // 댓글 내용이 비어있는지 확인
-    final content = _commentController.text.trim();
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('댓글 내용을 입력해주세요')));
+      _showLoginRequiredDialog();
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _isSubmittingComment = true;
     });
 
-    // 댓글 추가
-    Comment newComment = _pulseService.addComment(
-      pulseId: _pulse!.id,
-      parentId: _replyToCommentId,
-      content: content,
-    );
+    try {
+      final newComment = await _pulseService.addComment(
+        pulseId: widget.pulseId,
+        parentId: _replyToCommentId,
+        content: _commentController.text.trim(),
+      );
 
-    // UI 업데이트 및 입력 필드 초기화
-    setState(() {
-      _comments.add(newComment);
-      _commentController.clear();
-      _replyToCommentId = null;
-      _replyToAuthor = null;
-      _isLoading = false;
-    });
+      if (newComment != null && mounted) {
+        setState(() {
+          _comments.add(newComment);
+          _commentController.clear();
+          _replyToCommentId = null;
+          _replyToAuthor = null;
+          _isSubmittingComment = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('댓글 작성 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isSubmittingComment = false;
+        });
+      }
+    }
   }
 
   // 대댓글 모드 설정
@@ -173,26 +199,37 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
   }
 
   // 댓글 좋아요 처리
-  void _handleLikeComment(String commentId) {
-    final updatedComment = _pulseService.likeComment(commentId);
-    if (updatedComment != null) {
-      setState(() {
-        final index = _comments.indexWhere((c) => c.id == commentId);
-        if (index != -1) {
-          _comments[index] = updatedComment;
-        }
-      });
+  Future<void> _handleLikeComment(String commentId) async {
+    final authService = AuthService();
+    if (!authService.isLoggedIn) {
+      _showLoginRequiredDialog();
+      return;
+    }
+
+    try {
+      final updatedComment = await _pulseService.likeComment(commentId);
+      if (updatedComment != null && mounted) {
+        setState(() {
+          // 기존 댓글 찾아서 업데이트된 댓글로 교체
+          final index = _comments.indexWhere((c) => c.id == commentId);
+          if (index != -1) {
+            _comments[index] = updatedComment;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('댓글 좋아요 처리 오류: $e');
     }
   }
 
   // 로그인 필요 다이얼로그 표시
-  void _showLoginRequiredDialog(String action) {
+  void _showLoginRequiredDialog() {
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
             title: const Text('로그인 필요'),
-            content: Text('$action 기능을 사용하려면 로그인이 필요합니다.'),
+            content: const Text('이 기능을 사용하려면 로그인이 필요합니다.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -200,17 +237,13 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // 다이얼로그 닫기
-                  Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (context) => const LoginScreen(),
-                        ),
-                      )
-                      .then((_) {
-                        // 로그인 후 돌아오면 펄스 정보 새로고침
-                        _loadPulseData();
-                      });
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                  );
                 },
                 child: const Text('로그인하기'),
               ),
@@ -430,28 +463,42 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _comments.length,
-                          itemBuilder: (context, index) {
-                            final comment = _comments[index];
-                            // 부모 댓글만 표시
-                            if (comment.parentId == null) {
-                              return CommentItem(
-                                comment: comment,
-                                replies:
-                                    _comments
-                                        .where((c) => c.parentId == comment.id)
-                                        .toList(),
-                                onReply: _setReplyMode,
-                                onLike: _handleLikeComment,
-                              );
-                            } else {
-                              // 대댓글은 부모 댓글과 함께 표시
-                              return const SizedBox.shrink();
-                            }
-                          },
+                        Expanded(
+                          child:
+                              _comments.isEmpty
+                                  ? const Center(child: Text('아직 댓글이 없습니다'))
+                                  : ListView.builder(
+                                    itemCount: _comments.length,
+                                    itemBuilder: (context, index) {
+                                      final comment = _comments[index];
+                                      // 대댓글이 아닌 댓글만 표시
+                                      if (comment.parentId == null) {
+                                        // 이 댓글에 대한 대댓글 찾기
+                                        final replies =
+                                            _comments
+                                                .where(
+                                                  (c) =>
+                                                      c.parentId == comment.id,
+                                                )
+                                                .toList();
+                                        return CommentItem(
+                                          comment: comment,
+                                          replies: replies,
+                                          onReply:
+                                              () => _setReplyMode(
+                                                comment.id,
+                                                comment.author,
+                                              ),
+                                          onLike:
+                                              () => _handleLikeComment(
+                                                comment.id,
+                                              ),
+                                        );
+                                      } else {
+                                        return const SizedBox.shrink();
+                                      }
+                                    },
+                                  ),
                         ),
                       ],
                     ),
@@ -464,39 +511,23 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
           // 대댓글 모드 표시
           if (_replyToAuthor != null)
             Container(
-              color: Colors.blue.shade50,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(8),
+              color: Colors.grey[200],
               child: Row(
                 children: [
-                  Text(
-                    '@$_replyToAuthor에게 답글 작성 중',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text('@$_replyToAuthor에게 답글 작성 중'),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: const Icon(Icons.close),
                     onPressed: _cancelReplyMode,
                   ),
                 ],
               ),
             ),
 
-          // 댓글 입력
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.shade300,
-                  offset: const Offset(0, -1),
-                  blurRadius: 3,
-                ),
-              ],
-            ),
+          // 댓글 입력 필드
+          Padding(
+            padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
                 Expanded(
@@ -505,24 +536,26 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                     decoration: InputDecoration(
                       hintText:
                           _replyToAuthor != null
-                              ? '답글을 입력하세요...'
+                              ? '@$_replyToAuthor에게 답글 달기...'
                               : '댓글을 입력하세요...',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
                       ),
                     ),
-                    maxLines: 1,
+                    maxLines: null,
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _handleAddComment,
-                ),
+                _isSubmittingComment
+                    ? const CircularProgressIndicator()
+                    : IconButton(
+                      icon: const Icon(Icons.send),
+                      onPressed: _submitComment,
+                    ),
               ],
             ),
           ),

@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Comment {
   final String id;
@@ -100,7 +101,10 @@ class Comment {
       parentId: json['parentId'],
       author: json['author'],
       content: json['content'],
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt:
+          json['createdAt'] is String
+              ? DateTime.parse(json['createdAt'])
+              : (json['createdAt'] as Timestamp).toDate(),
       likes: List<String>.from(json['likes'] ?? []),
     );
   }

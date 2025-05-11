@@ -1,4 +1,5 @@
 import 'dart:math' as Math;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Pulse {
   final String id;
@@ -118,12 +119,12 @@ class Pulse {
     );
   }
 
-  // JSON 변환을 위한 메서드
+  // JSON 직렬화
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'author': author,
       'title': title,
+      'author': author,
       'content': content,
       'imageUrl': imageUrl,
       'tags': tags,
@@ -134,7 +135,7 @@ class Pulse {
     };
   }
 
-  // JSON에서 객체 생성을 위한 팩토리 메서드
+  // JSON에서 객체 생성
   factory Pulse.fromJson(Map<String, dynamic> json) {
     return Pulse(
       id: json['id'],
@@ -145,7 +146,10 @@ class Pulse {
       tags: List<String>.from(json['tags'] ?? []),
       upvotes: List<String>.from(json['upvotes'] ?? []),
       downvotes: List<String>.from(json['downvotes'] ?? []),
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt:
+          json['createdAt'] is String
+              ? DateTime.parse(json['createdAt'])
+              : (json['createdAt'] as Timestamp).toDate(),
       duration: Duration(seconds: json['duration']),
     );
   }

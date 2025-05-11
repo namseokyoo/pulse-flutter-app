@@ -8,6 +8,7 @@ import 'services/pulse_service.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   // Flutter 위젯 바인딩 확인
@@ -16,9 +17,26 @@ void main() async {
   // Firebase 초기화
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 샘플 데이터 로드 - Firebase 연결 후에는 제거할 수 있음
-  PulseService().loadMockData();
-  AuthService().loadMockUsers();
+  // Firestore에 초기 데이터 설정 (데이터가 없을 경우만)
+  try {
+    await PulseService().setupInitialData();
+    if (kDebugMode) {
+      print('Firestore 초기 데이터 설정 완료');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Firestore 초기 데이터 설정 오류: $e');
+    }
+  }
+
+  // Firebase Auth 초기화 (필요한 경우 더미 사용자 생성)
+  try {
+    AuthService().loadMockUsers();
+  } catch (e) {
+    if (kDebugMode) {
+      print('Auth 서비스 초기화 오류: $e');
+    }
+  }
 
   runApp(const PulseApp());
 }

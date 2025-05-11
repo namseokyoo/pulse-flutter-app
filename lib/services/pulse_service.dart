@@ -1,6 +1,9 @@
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/pulse.dart';
 import '../models/comment.dart';
+import 'auth_service.dart';
 
 class PulseService {
   // 싱글턴 패턴 구현
@@ -8,229 +11,497 @@ class PulseService {
   factory PulseService() => _instance;
   PulseService._internal();
 
-  final List<Pulse> _pulses = [];
-  final List<Comment> _comments = []; // 댓글 저장소
+  // Firestore 인스턴스
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuthService _authService = AuthService();
   final _uuid = const Uuid();
 
-  // 현재 사용자 ID (실제로는 인증 시스템에서 가져와야 함)
-  String get currentUserId => 'user-${DateTime.now().millisecondsSinceEpoch}';
+  // 현재 사용자 ID
+  String get currentUserId {
+    final user = _authService.currentUser;
+    return user?.id ?? 'anonymous-${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // 펄스 컬렉션 참조
+  CollectionReference get _pulsesCollection => _firestore.collection('pulses');
+
+  // 댓글 컬렉션 참조
+  CollectionReference get _commentsCollection =>
+      _firestore.collection('comments');
 
   // 모든 펄스 가져오기
-  List<Pulse> getAllPulses() {
-    // 만료된 펄스는 제외
-    final now = DateTime.now();
-    return _pulses.where((pulse) {
-      final expiresAt = pulse.createdAt.add(pulse.duration);
-      return expiresAt.isAfter(now);
-    }).toList();
+  Future<List<Pulse>> getAllPulses() async {
+    try {
+      // 만료되지 않은 펄스만 가져오기
+      final now = DateTime.now();
+      final QuerySnapshot snapshot = await _pulsesCollection.get();
+
+      List<Pulse> pulses = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+
+        // 문서 ID를 펄스 ID로 사용
+        data['id'] = doc.id;
+
+        // Firestore에서 데이터를 가져와 Pulse 객체로 변환
+        try {
+          final pulse = Pulse.fromJson(data);
+
+          // 만료된 펄스는 제외
+          final expiresAt = pulse.createdAt.add(pulse.duration);
+          if (expiresAt.isAfter(now)) {
+            pulses.add(pulse);
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Pulse 변환 중 오류: $e');
+          }
+        }
+      }
+
+      // 생성일시 기준 내림차순 정렬 (최신순)
+      pulses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return pulses;
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 목록 로드 중 오류: $e');
+      }
+      return [];
+    }
   }
 
   // 새 펄스 생성
-  Pulse createPulse({
+  Future<Pulse?> createPulse({
     required String title,
     required String content,
     required String author,
     String? imageUrl,
     List<String>? tags,
     Duration duration = const Duration(hours: 24),
-  }) {
-    final pulse = Pulse(
-      id: _uuid.v4(),
-      title: title,
-      author: author,
-      content: content,
-      imageUrl: imageUrl,
-      tags: tags ?? [],
-      createdAt: DateTime.now(),
-      duration: duration,
-    );
+  }) async {
+    try {
+      final now = DateTime.now();
 
-    _pulses.add(pulse);
-    return pulse;
+      // Firestore에 저장할 데이터
+      final pulseData = {
+        'title': title,
+        'author': author,
+        'content': content,
+        'imageUrl': imageUrl,
+        'tags': tags ?? [],
+        'upvotes': [],
+        'downvotes': [],
+        'createdAt': now.toIso8601String(),
+        'duration': duration.inSeconds,
+      };
+
+      // Firestore에 저장
+      final docRef = await _pulsesCollection.add(pulseData);
+
+      // 생성된 Pulse 객체 반환
+      return Pulse(
+        id: docRef.id,
+        title: title,
+        author: author,
+        content: content,
+        imageUrl: imageUrl,
+        tags: tags ?? [],
+        upvotes: [],
+        downvotes: [],
+        createdAt: now,
+        duration: duration,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 생성 중 오류: $e');
+      }
+      return null;
+    }
   }
 
   // 펄스 상세 정보 가져오기
-  Pulse? getPulseById(String id) {
-    final index = _pulses.indexWhere((pulse) => pulse.id == id);
-    if (index == -1) {
+  Future<Pulse?> getPulseById(String id) async {
+    try {
+      final docSnap = await _pulsesCollection.doc(id).get();
+      if (!docSnap.exists) {
+        return null;
+      }
+
+      final data = docSnap.data() as Map<String, dynamic>;
+      // 문서 ID를 펄스 ID로 사용
+      data['id'] = docSnap.id;
+
+      return Pulse.fromJson(data);
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 상세 정보 로드 중 오류: $e');
+      }
       return null;
     }
-    return _pulses[index];
   }
 
   // 펄스에 좋아요 추가 (시간 연장)
-  Pulse? upvotePulse(String id) {
-    final index = _pulses.indexWhere((pulse) => pulse.id == id);
-    if (index == -1) {
+  Future<Pulse?> upvotePulse(String id) async {
+    try {
+      // 트랜잭션 사용하여 동시성 이슈 방지
+      return await _firestore.runTransaction<Pulse?>((transaction) async {
+        final docRef = _pulsesCollection.doc(id);
+        final docSnap = await transaction.get(docRef);
+
+        if (!docSnap.exists) {
+          return null;
+        }
+
+        final data = docSnap.data() as Map<String, dynamic>;
+        data['id'] = docSnap.id;
+
+        final pulse = Pulse.fromJson(data);
+        final updatedPulse = pulse.addUpvote(currentUserId);
+
+        // Firestore에 업데이트할 데이터
+        final updateData = {
+          'upvotes': updatedPulse.upvotes,
+          'duration': updatedPulse.duration.inSeconds,
+        };
+
+        // 이미 싫어요를 눌렀었다면 제거
+        if (pulse.downvotes.contains(currentUserId)) {
+          final downvotes = List<String>.from(pulse.downvotes);
+          downvotes.remove(currentUserId);
+          updateData['downvotes'] = downvotes;
+        }
+
+        transaction.update(docRef, updateData);
+        return updatedPulse;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 좋아요 중 오류: $e');
+      }
       return null;
     }
-
-    final pulse = _pulses[index];
-    final updatedPulse = pulse.addUpvote(currentUserId);
-    _pulses[index] = updatedPulse;
-    return updatedPulse;
   }
 
   // 펄스에 싫어요 추가 (시간 축소)
-  Pulse? downvotePulse(String id) {
-    final index = _pulses.indexWhere((pulse) => pulse.id == id);
-    if (index == -1) {
+  Future<Pulse?> downvotePulse(String id) async {
+    try {
+      // 트랜잭션 사용하여 동시성 이슈 방지
+      return await _firestore.runTransaction<Pulse?>((transaction) async {
+        final docRef = _pulsesCollection.doc(id);
+        final docSnap = await transaction.get(docRef);
+
+        if (!docSnap.exists) {
+          return null;
+        }
+
+        final data = docSnap.data() as Map<String, dynamic>;
+        data['id'] = docSnap.id;
+
+        final pulse = Pulse.fromJson(data);
+        final updatedPulse = pulse.addDownvote(currentUserId);
+
+        // Firestore에 업데이트할 데이터
+        final updateData = {
+          'downvotes': updatedPulse.downvotes,
+          'duration': updatedPulse.duration.inSeconds,
+        };
+
+        // 이미 좋아요를 눌렀었다면 제거
+        if (pulse.upvotes.contains(currentUserId)) {
+          final upvotes = List<String>.from(pulse.upvotes);
+          upvotes.remove(currentUserId);
+          updateData['upvotes'] = upvotes;
+        }
+
+        transaction.update(docRef, updateData);
+        return updatedPulse;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 싫어요 중 오류: $e');
+      }
       return null;
     }
-
-    final pulse = _pulses[index];
-    final updatedPulse = pulse.addDownvote(currentUserId);
-    _pulses[index] = updatedPulse;
-    return updatedPulse;
   }
 
   // 펄스의 모든 댓글 가져오기
-  List<Comment> getCommentsForPulse(String pulseId) {
-    return _comments.where((comment) => comment.pulseId == pulseId).toList();
-  }
+  Future<List<Comment>> getCommentsForPulse(String pulseId) async {
+    try {
+      final QuerySnapshot snapshot =
+          await _commentsCollection.where('pulseId', isEqualTo: pulseId).get();
 
-  // 댓글의 대댓글 가져오기
-  List<Comment> getRepliesForComment(String commentId) {
-    return _comments.where((comment) => comment.parentId == commentId).toList();
+      List<Comment> comments = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        // 문서 ID를 댓글 ID로 사용
+        data['id'] = doc.id;
+
+        try {
+          final comment = Comment.fromJson(data);
+          comments.add(comment);
+        } catch (e) {
+          if (kDebugMode) {
+            print('댓글 변환 중 오류: $e');
+          }
+        }
+      }
+
+      // 생성일시 기준 오름차순 정렬 (오래된순)
+      comments.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+      return comments;
+    } catch (e) {
+      if (kDebugMode) {
+        print('댓글 목록 로드 중 오류: $e');
+      }
+      return [];
+    }
   }
 
   // 새 댓글 작성
-  Comment addComment({
+  Future<Comment?> addComment({
     required String pulseId,
     String? parentId,
     required String content,
-  }) {
-    final comment = Comment.create(
-      pulseId: pulseId,
-      parentId: parentId,
-      author: 'Anonymous', // 실제 구현에서는 현재 사용자 이름으로 변경
-      content: content,
-    );
+  }) async {
+    try {
+      final now = DateTime.now();
+      final user = _authService.currentUser;
+      final author = user?.username ?? 'Anonymous';
 
-    _comments.add(comment);
-    return comment;
+      // Firestore에 저장할 데이터
+      final commentData = {
+        'pulseId': pulseId,
+        'parentId': parentId,
+        'author': author,
+        'content': content,
+        'createdAt': now.toIso8601String(),
+        'likes': [],
+      };
+
+      // Firestore에 저장
+      final docRef = await _commentsCollection.add(commentData);
+
+      // 생성된 Comment 객체 반환
+      return Comment(
+        id: docRef.id,
+        pulseId: pulseId,
+        parentId: parentId,
+        author: author,
+        content: content,
+        createdAt: now,
+        likes: [],
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('댓글 생성 중 오류: $e');
+      }
+      return null;
+    }
   }
 
   // 댓글에 좋아요 추가
-  Comment? likeComment(String commentId) {
-    final index = _comments.indexWhere((comment) => comment.id == commentId);
-    if (index == -1) {
+  Future<Comment?> likeComment(String commentId) async {
+    try {
+      // 트랜잭션 사용하여 동시성 이슈 방지
+      return await _firestore.runTransaction<Comment?>((transaction) async {
+        final docRef = _commentsCollection.doc(commentId);
+        final docSnap = await transaction.get(docRef);
+
+        if (!docSnap.exists) {
+          return null;
+        }
+
+        final data = docSnap.data() as Map<String, dynamic>;
+        data['id'] = docSnap.id;
+
+        final comment = Comment.fromJson(data);
+        final updatedComment = comment.addLike(currentUserId);
+
+        // Firestore에 업데이트
+        transaction.update(docRef, {'likes': updatedComment.likes});
+
+        return updatedComment;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('댓글 좋아요 중 오류: $e');
+      }
       return null;
     }
-
-    final comment = _comments[index];
-    final updatedComment = comment.addLike(currentUserId);
-    _comments[index] = updatedComment;
-    return updatedComment;
   }
 
   // 댓글 삭제
-  bool deleteComment(String commentId) {
-    final index = _comments.indexWhere((comment) => comment.id == commentId);
-    if (index == -1) {
+  Future<bool> deleteComment(String commentId) async {
+    try {
+      // 먼저 대댓글들 찾기
+      final QuerySnapshot repliesSnapshot =
+          await _commentsCollection
+              .where('parentId', isEqualTo: commentId)
+              .get();
+
+      // 트랜잭션으로 댓글과 대댓글 모두 삭제
+      await _firestore.runTransaction((transaction) async {
+        // 대댓글 삭제
+        for (var doc in repliesSnapshot.docs) {
+          transaction.delete(doc.reference);
+        }
+
+        // 댓글 자체 삭제
+        transaction.delete(_commentsCollection.doc(commentId));
+      });
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('댓글 삭제 중 오류: $e');
+      }
       return false;
     }
-
-    // 먼저 이 댓글의 모든 대댓글 삭제
-    _comments.removeWhere((comment) => comment.parentId == commentId);
-
-    // 댓글 자체 삭제
-    _comments.removeAt(index);
-    return true;
   }
 
   // 펄스 삭제 (댓글도 함께 삭제)
-  void deletePulse(String id) {
-    _pulses.removeWhere((pulse) => pulse.id == id);
-    // 해당 펄스의 모든 댓글도 삭제
-    _comments.removeWhere((comment) => comment.pulseId == id);
+  Future<bool> deletePulse(String id) async {
+    try {
+      // 먼저 관련 댓글들 찾기
+      final QuerySnapshot commentsSnapshot =
+          await _commentsCollection.where('pulseId', isEqualTo: id).get();
+
+      // 트랜잭션으로 펄스와 모든 관련 댓글 삭제
+      await _firestore.runTransaction((transaction) async {
+        // 관련 댓글 모두 삭제
+        for (var doc in commentsSnapshot.docs) {
+          transaction.delete(doc.reference);
+        }
+
+        // 펄스 자체 삭제
+        transaction.delete(_pulsesCollection.doc(id));
+      });
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('펄스 삭제 중 오류: $e');
+      }
+      return false;
+    }
   }
 
   // 태그로 펄스 검색
-  List<Pulse> searchPulsesByTag(String tag) {
-    final now = DateTime.now();
-    return _pulses.where((pulse) {
-      final expiresAt = pulse.createdAt.add(pulse.duration);
-      return expiresAt.isAfter(now) && pulse.tags.contains(tag);
-    }).toList();
+  Future<List<Pulse>> searchPulsesByTag(String tag) async {
+    try {
+      final now = DateTime.now();
+      final QuerySnapshot snapshot =
+          await _pulsesCollection.where('tags', arrayContains: tag).get();
+
+      List<Pulse> pulses = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+
+        try {
+          final pulse = Pulse.fromJson(data);
+
+          // 만료된 펄스는 제외
+          final expiresAt = pulse.createdAt.add(pulse.duration);
+          if (expiresAt.isAfter(now)) {
+            pulses.add(pulse);
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Pulse 변환 중 오류: $e');
+          }
+        }
+      }
+
+      // 생성일시 기준 내림차순 정렬 (최신순)
+      pulses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return pulses;
+    } catch (e) {
+      if (kDebugMode) {
+        print('태그 검색 중 오류: $e');
+      }
+      return [];
+    }
   }
 
-  // 샘플 데이터 로드
-  void loadMockData() {
-    final now = DateTime.now();
+  // Firestore에 초기 데이터 설정 (테스트/개발용)
+  Future<void> setupInitialData() async {
+    try {
+      // 컬렉션이 비어있는지 확인
+      final pulsesSnapshot = await _pulsesCollection.limit(1).get();
 
-    // 샘플 펄스 데이터
-    final pulse1 = Pulse(
-      id: _uuid.v4(),
-      title: '펄스 테스트 게시글입니다',
-      author: '익명1',
-      content: '이 펄스는 테스트입니다. 게시판 스타일로 표시됩니다.',
-      tags: ['테스트', '공지'],
-      upvotes: ['user1', 'user2'],
-      downvotes: [],
-      createdAt: now.subtract(const Duration(hours: 1)),
-    );
+      if (pulsesSnapshot.docs.isEmpty) {
+        if (kDebugMode) {
+          print('Firestore에 초기 데이터 설정 중...');
+        }
 
-    final pulse2 = Pulse(
-      id: _uuid.v4(),
-      title: 'Flutter 개발 후기',
-      author: '익명2',
-      content: 'Flutter 너무 재밌다! 다양한 UI 컴포넌트를 쉽게 사용할 수 있어서 개발이 빠르게 진행됩니다.',
-      tags: ['Flutter', '개발'],
-      upvotes: ['user3'],
-      downvotes: ['user4'],
-      createdAt: now.subtract(const Duration(hours: 11, minutes: 15)),
-    );
+        final now = DateTime.now();
 
-    final pulse3 = Pulse(
-      id: _uuid.v4(),
-      title: '펄스 앱 소개',
-      author: '익명3',
-      content: '이 앱은 펄스 기반입니다. 24시간 동안만 게시물이 유지되는 특별한 게시판 앱입니다.',
-      imageUrl: 'https://picsum.photos/200',
-      tags: ['앱', '펄스'],
-      upvotes: ['user1', 'user5', 'user6'],
-      downvotes: ['user2'],
-      createdAt: now.subtract(const Duration(hours: 22, minutes: 55)),
-    );
+        // 샘플 펄스 생성
+        final pulse1 = await createPulse(
+          title: '펄스 테스트 게시글입니다',
+          author: '익명1',
+          content: '이 펄스는 테스트입니다. 게시판 스타일로 표시됩니다.',
+          tags: ['테스트', '공지'],
+        );
 
-    _pulses.addAll([pulse1, pulse2, pulse3]);
+        final pulse2 = await createPulse(
+          title: 'Flutter 개발 후기',
+          author: '익명2',
+          content: 'Flutter 너무 재밌다! 다양한 UI 컴포넌트를 쉽게 사용할 수 있어서 개발이 빠르게 진행됩니다.',
+          tags: ['Flutter', '개발'],
+        );
 
-    // 샘플 댓글 데이터
-    final comment1 = Comment(
-      id: _uuid.v4(),
-      pulseId: pulse1.id,
-      author: '익명4',
-      content: '정말 유용한 정보네요!',
-      createdAt: now.subtract(const Duration(minutes: 30)),
-      likes: ['user2', 'user5'],
-    );
+        final pulse3 = await createPulse(
+          title: '펄스 앱 소개',
+          author: '익명3',
+          content: '이 앱은 펄스 기반입니다. 24시간 동안만 게시물이 유지되는 특별한 게시판 앱입니다.',
+          imageUrl: 'https://picsum.photos/200',
+          tags: ['앱', '펄스'],
+        );
 
-    final comment2 = Comment(
-      id: _uuid.v4(),
-      pulseId: pulse1.id,
-      author: '익명5',
-      content: '응원합니다~',
-      createdAt: now.subtract(const Duration(minutes: 20)),
-    );
+        // 첫 번째 펄스에 댓글 추가
+        if (pulse1 != null) {
+          final comment1 = await addComment(
+            pulseId: pulse1.id,
+            content: '정말 유용한 정보네요!',
+          );
 
-    final reply1 = Comment(
-      id: _uuid.v4(),
-      pulseId: pulse1.id,
-      parentId: comment1.id,
-      author: '익명6',
-      content: '저도 동의합니다!',
-      createdAt: now.subtract(const Duration(minutes: 15)),
-    );
+          await addComment(pulseId: pulse1.id, content: '응원합니다~');
 
-    final comment3 = Comment(
-      id: _uuid.v4(),
-      pulseId: pulse2.id,
-      author: '익명7',
-      content: 'Flutter로 개발 시작했는데 정말 좋네요',
-      createdAt: now.subtract(const Duration(minutes: 45)),
-    );
+          // 대댓글 추가
+          if (comment1 != null) {
+            await addComment(
+              pulseId: pulse1.id,
+              parentId: comment1.id,
+              content: '저도 동의합니다!',
+            );
+          }
+        }
 
-    _comments.addAll([comment1, comment2, reply1, comment3]);
+        // 두 번째 펄스에 댓글 추가
+        if (pulse2 != null) {
+          await addComment(
+            pulseId: pulse2.id,
+            content: 'Flutter로 개발 시작했는데 정말 좋네요',
+          );
+        }
+
+        if (kDebugMode) {
+          print('초기 데이터 설정 완료!');
+        }
+      } else {
+        if (kDebugMode) {
+          print('Firestore에 이미 데이터가 있습니다. 초기 데이터를 설정하지 않습니다.');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('초기 데이터 설정 중 오류: $e');
+      }
+    }
   }
 }

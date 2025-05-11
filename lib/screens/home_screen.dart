@@ -16,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final PulseService _pulseService = PulseService();
   List<Pulse> _pulses = [];
   SortOption _sortOption = SortOption.latest;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -23,18 +24,32 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadPulses();
   }
 
-  void _loadPulses() {
+  // 펄스 데이터 로드
+  Future<void> _loadPulses() async {
     setState(() {
-      _pulses = _pulseService.getAllPulses();
-      _sortPulses();
+      _isLoading = true;
     });
+
+    try {
+      final pulses = await _pulseService.getAllPulses();
+      setState(() {
+        _pulses = pulses;
+        _sortPulses(); // 정렬 적용
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('펄스 로드 오류: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
+  // 펄스 정렬
   void _sortPulses() {
     setState(() {
       switch (_sortOption) {
         case SortOption.latest:
-          // 작성일 기준 정렬 (최신순)
           _pulses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           break;
         case SortOption.remainingAsc:
