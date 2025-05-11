@@ -28,26 +28,26 @@ class Routes {
   // 라우트 생성 함수
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
-      case splash:
+      case '/':
         return MaterialPageRoute(builder: (_) => const SplashScreen());
-      case main:
+      case '/main':
         return MaterialPageRoute(builder: (_) => const MainScreen());
-      case login:
+      case '/login':
         return MaterialPageRoute(builder: (_) => const LoginScreen());
-      case register:
+      case '/register':
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
-      case profile:
+      case '/profile':
         return MaterialPageRoute(builder: (_) => const ProfileScreen());
-      case createPulse:
+      case '/create-pulse':
         return MaterialPageRoute(builder: (_) => const CreatePulseScreen());
       case '/settings':
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
-      case pulseDetail:
+      case '/pulse-detail':
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
           builder: (_) => PulseDetailScreen(pulseId: args['pulseId']),
         );
-      case likedPulses:
+      case '/liked-pulses':
         final authService = AuthService();
         if (authService.currentUser == null) {
           // 로그인 되어 있지 않은 경우 로그인 화면으로 이동
@@ -57,7 +57,7 @@ class Routes {
           builder:
               (_) => LikedPulsesScreen(userId: authService.currentUser!.id),
         );
-      case myPulses:
+      case '/my-pulses':
         final authService = AuthService();
         if (authService.currentUser == null) {
           // 로그인 되어 있지 않은 경우 로그인 화면으로 이동

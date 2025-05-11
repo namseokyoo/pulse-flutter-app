@@ -11,32 +11,56 @@ import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'routes.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 void main() async {
   // Flutter 위젯 바인딩 확인
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase 초기화
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Firebase 초기화 옵션
+  final firebaseOptions = DefaultFirebaseOptions.currentPlatform;
 
-  // Firestore에 초기 데이터 설정 (데이터가 없을 경우만)
   try {
-    await PulseService().setupInitialData();
+    // Firebase 초기화
+    await Firebase.initializeApp(options: firebaseOptions);
+
     if (kDebugMode) {
-      print('Firestore 초기 데이터 설정 완료');
+      print('Firebase 초기화 완료');
+    }
+
+    // 디버그 모드에서 구글 로그인 설정
+    if (kDebugMode) {
+      // 에뮬레이터에서 웹뷰 인증 사용
+      await GoogleSignIn(scopes: ['email', 'profile']).signInSilently();
+      print('Google SignIn 초기화 완료');
+    }
+
+    // Firestore에 초기 데이터 설정 (데이터가 없을 경우만)
+    try {
+      await PulseService().setupInitialData();
+      if (kDebugMode) {
+        print('Firestore 초기 데이터 설정 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Firestore 초기 데이터 설정 오류: $e');
+      }
+    }
+
+    // Firebase Auth 초기화 (필요한 경우 더미 사용자 생성)
+    try {
+      AuthService().loadMockUsers();
+      if (kDebugMode) {
+        print('Auth 서비스 초기화 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Auth 서비스 초기화 오류: $e');
+      }
     }
   } catch (e) {
     if (kDebugMode) {
-      print('Firestore 초기 데이터 설정 오류: $e');
-    }
-  }
-
-  // Firebase Auth 초기화 (필요한 경우 더미 사용자 생성)
-  try {
-    AuthService().loadMockUsers();
-  } catch (e) {
-    if (kDebugMode) {
-      print('Auth 서비스 초기화 오류: $e');
+      print('Firebase 또는 Google SignIn 초기화 오류: $e');
     }
   }
 

@@ -15,7 +15,7 @@ class AuthService {
   final firebase_auth.FirebaseAuth _firebaseAuth =
       firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   // 현재 로그인한 사용자
   User? _currentUser;
@@ -314,122 +314,179 @@ class AuthService {
     }
     return;
   }
-  
+
   // Google 로그인 메서드
   Future<void> signInWithGoogle() async {
     try {
       if (kDebugMode) {
         print('Google 로그인 시작');
       }
-      
+
       // Google 로그인 과정 시작
+      await _googleSignIn.signOut(); // 기존 세션 정리
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         throw Exception('Google 로그인이 취소되었습니다');
       }
-      
+
       // Google 인증 정보 획득
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       // Firebase 인증 정보 생성
       final credential = firebase_auth.GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      
+
       // Firebase에 인증
-      final userCredential = await _firebaseAuth.signInWithCredential(credential);
-      final firebaseUser = userCredential.user;
-      
-      if (firebaseUser == null) {
-        throw Exception('Google 로그인 실패: 사용자 정보를 찾을 수 없습니다');
-      }
-      
-      // Firestore에서 사용자 정보 확인 (기존 회원인지 체크)
-      final userDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
-      
-      if (!userDoc.exists) {
-        // 신규 회원일 경우 Firestore에 정보 저장
-        final now = DateTime.now();
-        final userData = {
-          'id': firebaseUser.uid,
-          'email': firebaseUser.email ?? '',
-          'username': firebaseUser.displayName ?? 'user_${firebaseUser.uid.substring(0, 5)}',
-          'name': firebaseUser.displayName ?? '사용자',
-          'profileImageUrl': firebaseUser.photoURL,
-          'createdAt': Timestamp.fromDate(now),
-          'pulseIds': <String>[],
-          'bookmarkedPulseIds': <String>[],
-          'reputation': 0,
-        };
-        
-        await _firestore.collection('users').doc(firebaseUser.uid).set(userData);
-        
-        if (kDebugMode) {
-          print('Google 로그인 신규 사용자 정보 저장 완료');
-        }
-        
-        // 현재 사용자 정보 설정
-        _currentUser = User(
-          id: firebaseUser.uid,
-          email: firebaseUser.email ?? '',
-          username: userData['username'] as String,
-          name: userData['name'] as String,
-          profileImageUrl: firebaseUser.photoURL,
-          createdAt: now,
-          pulseIds: [],
-          bookmarkedPulseIds: [],
-          reputation: 0,
+      try {
+        final userCredential = await _firebaseAuth.signInWithCredential(
+          credential,
         );
-      } else {
-        // 기존 회원일 경우 Firestore에서 데이터 가져오기
-        final userData = userDoc.data()!;
-        
-        // createdAt 필드 처리
-        DateTime createdAt;
-        if (userData['createdAt'] is Timestamp) {
-          createdAt = (userData['createdAt'] as Timestamp).toDate();
-        } else if (userData['createdAt'] is String) {
-          createdAt = DateTime.parse(userData['createdAt']);
+        final firebaseUser = userCredential.user;
+
+        if (firebaseUser == null) {
+          throw Exception('Google 로그인 실패: 사용자 정보를 찾을 수 없습니다');
+        }
+
+        // Firestore에서 사용자 정보 확인 (기존 회원인지 체크)
+        final userDoc =
+            await _firestore.collection('users').doc(firebaseUser.uid).get();
+
+        if (!userDoc.exists) {
+          // 신규 회원일 경우 Firestore에 정보 저장
+          final now = DateTime.now();
+
+          // Google에서 기본 사용자 정보 가져오기
+          String userName = 'user_${firebaseUser.uid.substring(0, 5)}';
+          String name = '사용자';
+          String? photoUrl;
+
+          // Firebase User 정보 사용
+          if (firebaseUser.displayName != null &&
+              firebaseUser.displayName!.isNotEmpty) {
+            userName = firebaseUser.displayName!;
+            name = firebaseUser.displayName!;
+          }
+          // Google User 정보 사용 (백업)
+          else if (googleUser.displayName != null &&
+              googleUser.displayName!.isNotEmpty) {
+            userName = googleUser.displayName!;
+            name = googleUser.displayName!;
+          }
+
+          // 프로필 이미지 처리
+          photoUrl = firebaseUser.photoURL ?? googleUser.photoUrl;
+
+          final userData = {
+            'id': firebaseUser.uid,
+            'email': firebaseUser.email ?? '',
+            'username': userName,
+            'name': name,
+            'profileImageUrl': photoUrl,
+            'createdAt': Timestamp.fromDate(now),
+            'pulseIds': <String>[],
+            'bookmarkedPulseIds': <String>[],
+            'reputation': 0,
+          };
+
+          await _firestore
+              .collection('users')
+              .doc(firebaseUser.uid)
+              .set(userData);
+
+          if (kDebugMode) {
+            print('Google 로그인 신규 사용자 정보 저장 완료');
+          }
+
+          // 현재 사용자 정보 설정
+          _currentUser = User(
+            id: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            username: userData['username'] as String,
+            name: userData['name'] as String,
+            profileImageUrl: photoUrl,
+            createdAt: now,
+            pulseIds: [],
+            bookmarkedPulseIds: [],
+            reputation: 0,
+          );
         } else {
-          createdAt = DateTime.now(); // 기본값
+          // 기존 회원일 경우 Firestore에서 데이터 가져오기
+          final userData = userDoc.data()!;
+
+          // createdAt 필드 처리
+          DateTime createdAt;
+          if (userData['createdAt'] is Timestamp) {
+            createdAt = (userData['createdAt'] as Timestamp).toDate();
+          } else if (userData['createdAt'] is String) {
+            createdAt = DateTime.parse(userData['createdAt']);
+          } else {
+            createdAt = DateTime.now(); // 기본값
+          }
+
+          // 배열 필드 안전하게 변환
+          List<String> pulseIds = [];
+          List<String> bookmarkedPulseIds = [];
+
+          if (userData['pulseIds'] != null) {
+            pulseIds = List<String>.from(userData['pulseIds']);
+          }
+
+          if (userData['bookmarkedPulseIds'] != null) {
+            bookmarkedPulseIds = List<String>.from(
+              userData['bookmarkedPulseIds'],
+            );
+          }
+
+          // 프로필 이미지 처리
+          String? profileImageUrl = firebaseUser.photoURL;
+          if (profileImageUrl == null || profileImageUrl.isEmpty) {
+            profileImageUrl =
+                googleUser.photoUrl ?? userData['profileImageUrl'] as String?;
+          }
+
+          // 사용자 정보 설정
+          _currentUser = User(
+            id: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            username: userData['username'] as String,
+            name: userData['name'] as String,
+            profileImageUrl: profileImageUrl,
+            createdAt: createdAt,
+            pulseIds: pulseIds,
+            bookmarkedPulseIds: bookmarkedPulseIds,
+            reputation: userData['reputation'] ?? 0,
+          );
+
+          if (kDebugMode) {
+            print('Google 로그인 기존 사용자 정보 로드 완료');
+          }
         }
-        
-        // 배열 필드 안전하게 변환
-        List<String> pulseIds = [];
-        List<String> bookmarkedPulseIds = [];
-        
-        if (userData['pulseIds'] != null) {
-          pulseIds = List<String>.from(userData['pulseIds']);
-        }
-        
-        if (userData['bookmarkedPulseIds'] != null) {
-          bookmarkedPulseIds = List<String>.from(userData['bookmarkedPulseIds']);
-        }
-        
-        // 사용자 정보 설정
-        _currentUser = User(
-          id: firebaseUser.uid,
-          email: firebaseUser.email ?? '',
-          username: userData['username'] as String,
-          name: userData['name'] as String,
-          profileImageUrl: firebaseUser.photoURL ?? userData['profileImageUrl'],
-          createdAt: createdAt,
-          pulseIds: pulseIds,
-          bookmarkedPulseIds: bookmarkedPulseIds,
-          reputation: userData['reputation'] ?? 0,
-        );
-        
+      } catch (e) {
         if (kDebugMode) {
-          print('Google 로그인 기존 사용자 정보 로드 완료');
+          print('Firebase 인증 오류: $e');
+        }
+
+        if (e.toString().contains('invalid-credential')) {
+          throw Exception('구글 계정 인증에 실패했습니다. 다른 계정으로 시도해보세요.');
+        } else {
+          throw Exception('Firebase 인증 오류: ${e.toString()}');
         }
       }
     } catch (e) {
       if (kDebugMode) {
         print('Google 로그인 오류: $e');
       }
-      throw Exception('Google 로그인 실패: ${e.toString()}');
+
+      if (e is Exception) {
+        throw e;
+      } else {
+        throw Exception('Google 로그인 실패: ${e.toString()}');
+      }
     }
   }
 

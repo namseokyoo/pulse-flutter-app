@@ -5,6 +5,7 @@ import '../services/pulse_service.dart';
 import '../widgets/comment_item.dart';
 import '../services/auth_service.dart';
 import '../routes.dart';
+import '../main.dart'; // AppColors 사용
 
 class PulseDetailScreen extends StatefulWidget {
   final String pulseId;
@@ -284,7 +285,7 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                 children: [
                   // 게시글 헤더 (작성자, 날짜 등)
                   Container(
-                    color: Colors.grey.shade50,
+                    color: AppColors.cardBackground,
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,6 +297,7 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                           ],
@@ -305,17 +307,17 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                           children: [
                             Text(
                               '작성자: ${_pulse!.author}',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey.shade700,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                             const Spacer(),
                             Text(
                               '남은 시간: ${_pulse!.remainingTime}',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey.shade700,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -331,7 +333,11 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                                     materialTapTargetSize:
                                         MaterialTapTargetSize.shrinkWrap,
                                     labelStyle: const TextStyle(fontSize: 12),
-                                    padding: EdgeInsets.zero,
+                                    backgroundColor: AppColors.background,
+                                    labelPadding: EdgeInsets.zero,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
                                   );
                                 }).toList(),
                           ),
@@ -346,7 +352,13 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_pulse!.content),
+                        Text(
+                          _pulse!.content,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            height: 1.5,
+                          ),
+                        ),
                         if (_pulse!.imageUrl != null) ...[
                           const SizedBox(height: 16),
                           ClipRRect(
@@ -396,44 +408,52 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                       children: [
                         Text(
                           '투표: ${_pulse!.upvoteCount} 좋아요, ${_pulse!.downvoteCount} 싫어요',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 14,
-                            color: Colors.grey.shade700,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         Row(
                           children: [
                             // 좋아요 버튼
                             ElevatedButton.icon(
-                              onPressed: _handleUpvote,
-                              icon: Image.asset(
-                                'assets/icons/like.png',
-                                width: 22,
-                                height: 22,
-                                filterQuality: FilterQuality.high,
-                                isAntiAlias: true,
-                              ),
+                              onPressed: _isVoting ? null : _handleUpvote,
+                              icon: const Icon(Icons.favorite, size: 20),
                               label: const Text('좋아요'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade100,
-                                foregroundColor: Colors.blue.shade800,
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: AppColors.primaryBlue
+                                    .withOpacity(0.5),
+                                disabledForegroundColor: Colors.white70,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             // 싫어요 버튼
                             ElevatedButton.icon(
-                              onPressed: _handleDownvote,
-                              icon: Image.asset(
-                                'assets/icons/dislike.png',
-                                width: 22,
-                                height: 22,
-                                filterQuality: FilterQuality.high,
-                                isAntiAlias: true,
-                              ),
+                              onPressed: _isVoting ? null : _handleDownvote,
+                              icon: const Icon(Icons.thumb_down, size: 20),
                               label: const Text('싫어요'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red.shade100,
-                                foregroundColor: Colors.red.shade800,
+                                backgroundColor: AppColors.accentRed,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: AppColors.accentRed
+                                    .withOpacity(0.5),
+                                disabledForegroundColor: Colors.white70,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                           ],
@@ -442,7 +462,7 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                     ),
                   ),
 
-                  const Divider(thickness: 1),
+                  const Divider(thickness: 1, color: AppColors.divider),
 
                   // 댓글 섹션
                   Padding(
@@ -455,56 +475,62 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // 댓글 목록 (Expanded 제거하고 직접 높이 설정)
                         _comments.isEmpty
                             ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: Text('아직 댓글이 없습니다'),
-                                ),
-                              )
-                            : ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxHeight: 500, // 최대 높이 설정
-                                ),
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const ClampingScrollPhysics(),
-                                  itemCount: _comments.length,
-                                  itemBuilder: (context, index) {
-                                    final comment = _comments[index];
-                                    // 대댓글이 아닌 댓글만 표시
-                                    if (comment.parentId == null) {
-                                      // 이 댓글에 대한 대댓글 찾기
-                                      final replies =
-                                          _comments
-                                              .where(
-                                                (c) => c.parentId == comment.id,
-                                              )
-                                              .toList();
-                                      return CommentItem(
-                                        comment: comment,
-                                        replies: replies,
-                                        onReply: () {
-                                          _setReplyMode(
-                                            comment.id,
-                                            comment.author,
-                                          );
-                                        },
-                                        onLike: () {
-                                          _handleLikeComment(comment.id);
-                                        },
-                                      );
-                                    } else {
-                                      return const SizedBox.shrink();
-                                    }
-                                  },
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  '아직 댓글이 없습니다',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ),
+                            )
+                            : ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxHeight: 500, // 최대 높이 설정
+                              ),
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: _comments.length,
+                                itemBuilder: (context, index) {
+                                  final comment = _comments[index];
+                                  // 대댓글이 아닌 댓글만 표시
+                                  if (comment.parentId == null) {
+                                    // 이 댓글에 대한 대댓글 찾기
+                                    final replies =
+                                        _comments
+                                            .where(
+                                              (c) => c.parentId == comment.id,
+                                            )
+                                            .toList();
+                                    return CommentItem(
+                                      comment: comment,
+                                      replies: replies,
+                                      onReply: () {
+                                        _setReplyMode(
+                                          comment.id,
+                                          comment.author,
+                                        );
+                                      },
+                                      onLike: () {
+                                        _handleLikeComment(comment.id);
+                                      },
+                                    );
+                                  } else {
+                                    return const SizedBox.shrink();
+                                  }
+                                },
+                              ),
+                            ),
                       ],
                     ),
                   ),
@@ -517,13 +543,19 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
           if (_replyToAuthor != null)
             Container(
               padding: const EdgeInsets.all(8),
-              color: Colors.grey[200],
+              color: AppColors.cardBackground,
               child: Row(
                 children: [
-                  Text('@$_replyToAuthor에게 답글 작성 중'),
+                  Text(
+                    '@$_replyToAuthor에게 답글 작성 중',
+                    style: const TextStyle(color: AppColors.textPrimary),
+                  ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(
+                      Icons.close,
+                      color: AppColors.textSecondary,
+                    ),
                     onPressed: _cancelReplyMode,
                   ),
                 ],
@@ -538,13 +570,20 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                 Expanded(
                   child: TextField(
                     controller: _commentController,
+                    style: const TextStyle(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       hintText:
                           _replyToAuthor != null
                               ? '@$_replyToAuthor에게 답글 달기...'
                               : '댓글을 입력하세요...',
+                      hintStyle: const TextStyle(
+                        color: AppColors.textSecondary,
+                      ),
+                      fillColor: AppColors.cardBackground,
+                      filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -557,9 +596,15 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                 const SizedBox(width: 8),
                 _isSubmittingComment
                     ? const CircularProgressIndicator()
-                    : IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _submitComment,
+                    : Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primaryBlue,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        onPressed: _submitComment,
+                      ),
                     ),
               ],
             ),

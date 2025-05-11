@@ -78,69 +78,18 @@ class PulseCard extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // 남은 시간
-                Text(
-                  remainingTime,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // 인터랙션 버튼과 상태 표시
+                // 하단 영역: 남은 시간 및 상태 표시
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // 인터랙션 버튼
-                    Row(
-                      children: [
-                        // 좋아요 버튼
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.add,
-                              color: AppColors.textPrimary,
-                              size: 20,
-                            ),
-                            onPressed: () {},
-                            constraints: const BoxConstraints(
-                              minWidth: 40,
-                              minHeight: 40,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        // 싫어요 버튼
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.remove,
-                              color: AppColors.textPrimary,
-                              size: 20,
-                            ),
-                            onPressed: () {},
-                            constraints: const BoxConstraints(
-                              minWidth: 40,
-                              minHeight: 40,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                      ],
+                    // 남은 시간
+                    Text(
+                      remainingTime,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
 
                     // 상태 표시 (Normal 또는 Critical)
@@ -165,21 +114,20 @@ class PulseCard extends StatelessWidget {
                   ],
                 ),
 
-                // 심전도 파형 (옵션) - 중요도에 따라 다른 색상 적용
-                if (pulse.getRemainingTime().inHours <= 6)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: SizedBox(
-                        width: 80,
-                        height: 30,
-                        child: CustomPaint(
-                          painter: WavePainter(color: statusInfo['waveColor']),
-                        ),
+                // 심전도 파형 - 모든 카드에 항상 표시
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: 100,
+                      height: 30,
+                      child: CustomPaint(
+                        painter: WavePainter(color: statusInfo['waveColor']),
                       ),
                     ),
                   ),
+                ),
               ],
             ),
           ),
