@@ -40,7 +40,7 @@ class Routes {
         return MaterialPageRoute(builder: (_) => const ProfileScreen());
       case createPulse:
         return MaterialPageRoute(builder: (_) => const CreatePulseScreen());
-      case settings:
+      case '/settings':
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
       case pulseDetail:
         final args = settings.arguments as Map<String, dynamic>;
