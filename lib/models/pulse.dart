@@ -35,6 +35,36 @@ class Pulse {
   // 총 투표 수
   int get totalVotes => upvoteCount + downvoteCount;
 
+  // 남은 기간 Duration 형태로 반환
+  Duration getRemainingTime() {
+    final expiresAt = createdAt.add(duration);
+    final remaining = expiresAt.difference(DateTime.now());
+
+    if (remaining.isNegative) {
+      return Duration.zero;
+    }
+
+    return remaining;
+  }
+
+  // 남은 시간을 포맷팅된 문자열로 반환
+  String getRemainingTimeFormatted() {
+    final remaining = getRemainingTime();
+
+    if (remaining == Duration.zero) {
+      return 'Expired';
+    }
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+
+    if (hours > 0) {
+      return '${hours}h ${minutes}m left';
+    } else {
+      return '${minutes}m left';
+    }
+  }
+
   String get remainingTime {
     final expiresAt = createdAt.add(duration);
     final remaining = expiresAt.difference(DateTime.now());

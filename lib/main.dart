@@ -4,6 +4,7 @@ import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 import 'screens/create_pulse_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/settings_screen.dart';
 import 'services/pulse_service.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
@@ -42,6 +43,21 @@ void main() async {
   runApp(const PulseApp());
 }
 
+// 앱의 테마 색상 정의
+class AppColors {
+  static const Color primaryBlue = Color(0xFF2196F3);
+  static const Color primaryBlueLight = Color(0xFF64B5F6);
+  static const Color accentRed = Color(0xFFFF5252);
+  static const Color accentBlue = Color(0xFF448AFF);
+  static const Color background = Color(0xFF121212);
+  static const Color cardBackground = Color(0xFF1E1E1E);
+  static const Color textPrimary = Colors.white;
+  static const Color textSecondary = Color(0xFFB0B0B0);
+  static const Color divider = Color(0xFF323232);
+  static const Color critical = Color(0xFFFF5252);
+  static const Color normal = Color(0xFF448AFF);
+}
+
 class PulseApp extends StatelessWidget {
   const PulseApp({super.key});
 
@@ -51,22 +67,117 @@ class PulseApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: Routes.navigatorKey,
       title: 'Pulse',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
-        useMaterial3: true,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: AppColors.background,
+        primaryColor: AppColors.primaryBlue,
+        colorScheme: const ColorScheme.dark(
+          primary: AppColors.primaryBlue,
+          secondary: AppColors.accentBlue,
+          surface: AppColors.cardBackground,
+          background: AppColors.background,
+          error: AppColors.accentRed,
+        ),
+        cardTheme: const CardTheme(
+          color: AppColors.cardBackground,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+        ),
         appBarTheme: const AppBarTheme(
           titleTextStyle: TextStyle(
-            color: Colors.redAccent,
+            color: AppColors.textPrimary,
             fontSize: 20,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
           ),
-          centerTitle: false,
-          backgroundColor: Colors.white,
+          centerTitle: true,
+          backgroundColor: AppColors.background,
           elevation: 0,
-          iconTheme: IconThemeData(color: Colors.redAccent),
+          iconTheme: IconThemeData(color: AppColors.primaryBlue),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          backgroundColor: AppColors.background,
+          selectedItemColor: AppColors.primaryBlue,
+          unselectedItemColor: AppColors.textSecondary,
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: AppColors.primaryBlue),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryBlue,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          ),
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: MaterialStateProperty.resolveWith<Color>((states) {
+            if (states.contains(MaterialState.selected)) {
+              return AppColors.primaryBlue;
+            }
+            return AppColors.textSecondary;
+          }),
+          trackColor: MaterialStateProperty.resolveWith<Color>((states) {
+            if (states.contains(MaterialState.selected)) {
+              return AppColors.primaryBlue.withOpacity(0.5);
+            }
+            return AppColors.textSecondary.withOpacity(0.3);
+          }),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: AppColors.divider,
+          thickness: 1,
+        ),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: AppColors.textPrimary),
+          bodyMedium: TextStyle(color: AppColors.textPrimary),
+          titleLarge: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+          titleMedium: TextStyle(color: AppColors.textPrimary),
+          titleSmall: TextStyle(color: AppColors.textSecondary),
         ),
       ),
+      darkTheme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: AppColors.background,
+        primaryColor: AppColors.primaryBlue,
+        colorScheme: const ColorScheme.dark(
+          primary: AppColors.primaryBlue,
+          secondary: AppColors.accentBlue,
+          surface: AppColors.cardBackground,
+          background: AppColors.background,
+          error: AppColors.accentRed,
+        ),
+        cardTheme: const CardTheme(
+          color: AppColors.cardBackground,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+        ),
+        appBarTheme: const AppBarTheme(
+          titleTextStyle: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+          centerTitle: true,
+          backgroundColor: AppColors.background,
+          elevation: 0,
+          iconTheme: IconThemeData(color: AppColors.primaryBlue),
+        ),
+      ),
+      themeMode: ThemeMode.dark, // 항상 다크 모드 사용
       initialRoute: Routes.splash,
       onGenerateRoute: Routes.generateRoute,
     );
@@ -82,20 +193,20 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  
+
   // 화면 목록
   final List<Widget> _screens = [
     const HomeScreen(),
     const CreatePulseScreen(),
-    const Center(child: Text('알림')), // 임시 알림 화면
+    const SettingsScreen(),
   ];
 
   void _onTabTapped(int index) {
     // 로그인 여부 확인
     final authService = AuthService();
 
-    // Create 또는 Alerts 탭 클릭 시 로그인 확인
-    if ((index == 1 || index == 2) && !authService.isLoggedIn) {
+    // Create 탭 클릭 시 로그인 확인
+    if (index == 1 && !authService.isLoggedIn) {
       // 로그인되지 않은 상태라면 로그인 화면으로 이동
       showDialog(
         context: context,
@@ -129,7 +240,7 @@ class _MainScreenState extends State<MainScreen> {
           setState(() {
             _currentIndex = 0;
           });
-          
+
           // 홈 화면 위젯 찾아서 데이터 새로고침
           if (_screens[0] is HomeScreen) {
             final homeScreen = _screens[0] as HomeScreen;
@@ -148,10 +259,15 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 80, fit: BoxFit.contain),
-
-        elevation: _currentIndex == 0 ? 0 : 1,
-        backgroundColor: Colors.white,
+        title: const Text(
+          'Pulse',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        elevation: 0,
         actions: [
           if (_currentIndex == 0) // 홈 화면일 때만 검색, 프로필 아이콘 표시
             IconButton(
@@ -190,14 +306,20 @@ class _MainScreenState extends State<MainScreen> {
         currentIndex: _currentIndex,
         onTap: _onTabTapped,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            label: 'Create',
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_none),
-            label: 'Alerts',
+            icon: Icon(Icons.add_circle_outline),
+            activeIcon: Icon(Icons.add_circle),
+            label: 'Create Pulse',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
