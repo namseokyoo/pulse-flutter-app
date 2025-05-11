@@ -23,20 +23,31 @@ class _MyPulsesScreenState extends State<MyPulsesScreen> {
     _loadMyPulses();
   }
 
-  void _loadMyPulses() {
+  Future<void> _loadMyPulses() async {
     setState(() {
       _isLoading = true;
     });
 
-    // 사용자가 작성한 펄스만 필터링
-    final allPulses = _pulseService.getAllPulses();
-    final myPulses =
-        allPulses.where((pulse) => pulse.author == widget.userId).toList();
+    try {
+      // 사용자가 작성한 펄스만 필터링
+      final allPulses = await _pulseService.getAllPulses();
+      final myPulses =
+          allPulses.where((pulse) => pulse.author == widget.userId).toList();
 
-    setState(() {
-      _myPulses = myPulses;
-      _isLoading = false;
-    });
+      if (mounted) {
+        setState(() {
+          _myPulses = myPulses;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('내 펄스 로드 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override

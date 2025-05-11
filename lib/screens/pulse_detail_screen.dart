@@ -4,7 +4,7 @@ import '../models/comment.dart';
 import '../services/pulse_service.dart';
 import '../widgets/comment_item.dart';
 import '../services/auth_service.dart';
-import 'login_screen.dart';
+import '../routes.dart';
 
 class PulseDetailScreen extends StatefulWidget {
   final String pulseId;
@@ -238,12 +238,7 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
-                    ),
-                  );
+                  Routes.navigateTo(Routes.login);
                 },
                 child: const Text('로그인하기'),
               ),
@@ -463,43 +458,53 @@ class _PulseDetailScreenState extends State<PulseDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Expanded(
-                          child:
-                              _comments.isEmpty
-                                  ? const Center(child: Text('아직 댓글이 없습니다'))
-                                  : ListView.builder(
-                                    itemCount: _comments.length,
-                                    itemBuilder: (context, index) {
-                                      final comment = _comments[index];
-                                      // 대댓글이 아닌 댓글만 표시
-                                      if (comment.parentId == null) {
-                                        // 이 댓글에 대한 대댓글 찾기
-                                        final replies =
-                                            _comments
-                                                .where(
-                                                  (c) =>
-                                                      c.parentId == comment.id,
-                                                )
-                                                .toList();
-                                        return CommentItem(
-                                          comment: comment,
-                                          replies: replies,
-                                          onReply:
-                                              () => _setReplyMode(
-                                                comment.id,
-                                                comment.author,
-                                              ),
-                                          onLike:
-                                              () => _handleLikeComment(
-                                                comment.id,
-                                              ),
-                                        );
-                                      } else {
-                                        return const SizedBox.shrink();
-                                      }
-                                    },
-                                  ),
-                        ),
+                        
+                        // 댓글 목록 (Expanded 제거하고 직접 높이 설정)
+                        _comments.isEmpty
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Text('아직 댓글이 없습니다'),
+                                ),
+                              )
+                            : ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 500, // 최대 높이 설정
+                                ),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemCount: _comments.length,
+                                  itemBuilder: (context, index) {
+                                    final comment = _comments[index];
+                                    // 대댓글이 아닌 댓글만 표시
+                                    if (comment.parentId == null) {
+                                      // 이 댓글에 대한 대댓글 찾기
+                                      final replies =
+                                          _comments
+                                              .where(
+                                                (c) => c.parentId == comment.id,
+                                              )
+                                              .toList();
+                                      return CommentItem(
+                                        comment: comment,
+                                        replies: replies,
+                                        onReply: () {
+                                          _setReplyMode(
+                                            comment.id,
+                                            comment.author,
+                                          );
+                                        },
+                                        onLike: () {
+                                          _handleLikeComment(comment.id);
+                                        },
+                                      );
+                                    } else {
+                                      return const SizedBox.shrink();
+                                    }
+                                  },
+                                ),
+                              ),
                       ],
                     ),
                   ),

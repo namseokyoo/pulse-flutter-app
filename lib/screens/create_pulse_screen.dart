@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/pulse_service.dart';
+import '../routes.dart';
 
 class CreatePulseScreen extends StatefulWidget {
   const CreatePulseScreen({super.key});
@@ -93,7 +94,7 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
         tags: _tags.isNotEmpty ? _tags : null,
       );
 
-      Navigator.pop(context, true); // true는 변경이 있었음을 나타냄
+      Routes.goBack(true); // true는 변경이 있었음을 나타냄
     } catch (e) {
       // 에러 처리
       ScaffoldMessenger.of(

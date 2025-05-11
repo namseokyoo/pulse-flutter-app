@@ -9,6 +9,7 @@ import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
 import 'package:flutter/foundation.dart';
+import 'routes.dart';
 
 void main() async {
   // Flutter 위젯 바인딩 확인
@@ -48,6 +49,7 @@ class PulseApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: Routes.navigatorKey,
       title: 'Pulse',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
@@ -65,7 +67,8 @@ class PulseApp extends StatelessWidget {
           iconTheme: IconThemeData(color: Colors.redAccent),
         ),
       ),
-      home: const SplashScreen(),
+      initialRoute: Routes.splash,
+      onGenerateRoute: Routes.generateRoute,
     );
   }
 }
@@ -79,7 +82,8 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-
+  
+  // 화면 목록
   final List<Widget> _screens = [
     const HomeScreen(),
     const CreatePulseScreen(),
@@ -107,11 +111,7 @@ class _MainScreenState extends State<MainScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context); // 다이얼로그 닫기
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
-                      ),
-                    );
+                    Routes.navigateTo(Routes.login);
                   },
                   child: const Text('로그인하기'),
                 ),
@@ -123,15 +123,18 @@ class _MainScreenState extends State<MainScreen> {
 
     // 작성 화면은 매번 새로 생성해야 함
     if (index == 1) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const CreatePulseScreen()),
-      ).then((result) {
+      Routes.navigateTo(Routes.createPulse).then((result) {
         if (result == true) {
-          // 홈 화면으로 돌아가기
+          // 홈 화면으로 돌아가고 데이터 새로고침
           setState(() {
             _currentIndex = 0;
           });
+          
+          // 홈 화면 위젯 찾아서 데이터 새로고침
+          if (_screens[0] is HomeScreen) {
+            final homeScreen = _screens[0] as HomeScreen;
+            homeScreen.refreshData(context);
+          }
         }
       });
     } else {

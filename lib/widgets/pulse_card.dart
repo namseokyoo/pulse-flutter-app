@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/pulse.dart';
-import '../screens/pulse_detail_screen.dart';
+import '../routes.dart';
 
 class PulseCard extends StatelessWidget {
   final Pulse pulse;
@@ -14,11 +14,9 @@ class PulseCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PulseDetailScreen(pulseId: pulse.id),
-            ),
+          Routes.navigateTo(
+            Routes.pulseDetail,
+            arguments: {'pulseId': pulse.id},
           ).then((_) {
             // 디테일 화면에서 돌아왔을 때 목록 새로고침
             if (onRefresh != null) {

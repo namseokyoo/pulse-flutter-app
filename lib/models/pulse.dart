@@ -137,20 +137,75 @@ class Pulse {
 
   // JSON에서 객체 생성
   factory Pulse.fromJson(Map<String, dynamic> json) {
+    // ID 필드 확인
+    final id = json['id'] as String? ?? '';
+
+    // 시간 필드 처리
+    DateTime createdAt;
+    final createdAtValue = json['createdAt'];
+
+    if (createdAtValue is Timestamp) {
+      createdAt = createdAtValue.toDate();
+    } else if (createdAtValue is String) {
+      createdAt = DateTime.parse(createdAtValue);
+    } else {
+      createdAt = DateTime.now(); // 기본값
+    }
+
+    // 지속 시간 필드 처리
+    Duration duration;
+    final durationValue = json['duration'];
+
+    if (durationValue is int) {
+      duration = Duration(seconds: durationValue);
+    } else if (durationValue is String) {
+      // 문자열로 저장된 경우 (초 단위)
+      duration = Duration(
+        seconds: int.tryParse(durationValue) ?? 86400,
+      ); // 기본 24시간
+    } else {
+      duration = const Duration(hours: 24); // 기본값
+    }
+
+    // 배열 필드 안전하게 처리
+    List<String> tags = [];
+    if (json['tags'] != null) {
+      if (json['tags'] is List) {
+        tags = List<String>.from(
+          (json['tags'] as List).map((item) => item.toString()),
+        );
+      }
+    }
+
+    List<String> upvotes = [];
+    if (json['upvotes'] != null) {
+      if (json['upvotes'] is List) {
+        upvotes = List<String>.from(
+          (json['upvotes'] as List).map((item) => item.toString()),
+        );
+      }
+    }
+
+    List<String> downvotes = [];
+    if (json['downvotes'] != null) {
+      if (json['downvotes'] is List) {
+        downvotes = List<String>.from(
+          (json['downvotes'] as List).map((item) => item.toString()),
+        );
+      }
+    }
+
     return Pulse(
-      id: json['id'],
-      author: json['author'],
-      title: json['title'],
-      content: json['content'],
-      imageUrl: json['imageUrl'],
-      tags: List<String>.from(json['tags'] ?? []),
-      upvotes: List<String>.from(json['upvotes'] ?? []),
-      downvotes: List<String>.from(json['downvotes'] ?? []),
-      createdAt:
-          json['createdAt'] is String
-              ? DateTime.parse(json['createdAt'])
-              : (json['createdAt'] as Timestamp).toDate(),
-      duration: Duration(seconds: json['duration']),
+      id: id,
+      author: json['author'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String?,
+      tags: tags,
+      upvotes: upvotes,
+      downvotes: downvotes,
+      createdAt: createdAt,
+      duration: duration,
     );
   }
 }

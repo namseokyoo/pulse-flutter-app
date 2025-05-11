@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'register_screen.dart';
-import '../main.dart';
+import '../routes.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -44,9 +43,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
+        // 모든 화면을 제거하고 메인 화면으로 이동 (뒤로 가기 방지)
+        Routes.clearStackAndNavigateTo(Routes.main);
       }
     } catch (e) {
       setState(() {
@@ -186,15 +184,76 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 16.0),
+                
+                // 구분선과 소셜 로그인 텍스트
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        '소셜 계정으로 로그인',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12.0,
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                
+                const SizedBox(height: 16.0),
+                
+                // Google 로그인 버튼
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = null;
+                    });
+                    
+                    try {
+                      await _authService.signInWithGoogle();
+                      if (mounted) {
+                        Routes.clearStackAndNavigateTo(Routes.main);
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        setState(() {
+                          _errorMessage = e.toString();
+                        });
+                      }
+                    } finally {
+                      if (mounted) {
+                        setState(() {
+                          _isLoading = false;
+                        });
+                      }
+                    }
+                  },
+                  icon: Image.asset(
+                    'assets/icons/google/google_logo.png',
+                    width: 24.0,
+                    height: 24.0,
+                  ),
+                  label: const Text('Google로 계속하기'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black87,
+                    minimumSize: const Size(double.infinity, 50.0),
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 16.0),
 
                 // 회원가입 링크
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterScreen(),
-                      ),
-                    );
+                    Routes.navigateTo(Routes.register);
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.redAccent,

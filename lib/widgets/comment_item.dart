@@ -4,8 +4,8 @@ import '../models/comment.dart';
 class CommentItem extends StatelessWidget {
   final Comment comment;
   final List<Comment> replies;
-  final Function(String, String) onReply;
-  final Function(String) onLike;
+  final VoidCallback onReply;
+  final VoidCallback onLike;
 
   const CommentItem({
     super.key,
@@ -20,67 +20,102 @@ class CommentItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 메인 댓글
+        // 댓글 본문
         Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: Column(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 작성자 정보
-              Row(
-                children: [
-                  Text(
-                    comment.author,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDate(comment.createdAt),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                ],
+              // 프로필 아이콘
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.grey.shade200,
+                child: Text(
+                  comment.author.substring(0, 1).toUpperCase(),
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
               ),
+              const SizedBox(width: 12),
 
               // 댓글 내용
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(comment.content),
-              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          comment.author,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _getTimeAgo(comment.createdAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(comment.content),
+                    const SizedBox(height: 8),
 
-              // 액션 버튼 (좋아요, 답글)
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () => onLike(comment.id),
-                    icon: const Icon(Icons.favorite_border, size: 16),
-                    label: Text('${comment.likeCount}'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 0,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
+                    // 좋아요, 답글 버튼
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: onLike,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.favorite,
+                                size: 16,
+                                color:
+                                    comment.likes.isNotEmpty
+                                        ? Colors.red
+                                        : Colors.grey,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${comment.likeCount}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        InkWell(
+                          onTap: onReply,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.reply,
+                                size: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '답글',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => onReply(comment.id, comment.author),
-                    child: const Text('답글달기'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 0,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -88,75 +123,66 @@ class CommentItem extends StatelessWidget {
 
         // 대댓글 목록
         if (replies.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(left: 16, bottom: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(width: 1, color: Colors.grey.shade300),
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.only(left: 44),
             child: Column(
               children:
-                  replies
-                      .map(
-                        (reply) => Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 0, 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 작성자 정보
-                              Row(
-                                children: [
-                                  Text(
-                                    reply.author,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _formatDate(reply.createdAt),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
+                  replies.map((reply) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 대댓글 프로필 아이콘
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.grey.shade200,
+                            child: Text(
+                              reply.author.substring(0, 1).toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 10,
                               ),
-
-                              // 댓글 내용
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4,
-                                ),
-                                child: Text(reply.content),
-                              ),
-
-                              // 액션 버튼 (좋아요만)
-                              TextButton.icon(
-                                onPressed: () => onLike(reply.id),
-                                icon: const Icon(
-                                  Icons.favorite_border,
-                                  size: 14,
-                                ),
-                                label: Text('${reply.likeCount}'),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 0,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(),
+                          const SizedBox(width: 8),
+
+                          // 대댓글 내용
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      reply.author,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _getTimeAgo(reply.createdAt),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  reply.content,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
 
@@ -165,10 +191,9 @@ class CommentItem extends StatelessWidget {
     );
   }
 
-  // 날짜 포맷 헬퍼 메서드
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
+  // 시간 표시 형식 변환
+  String _getTimeAgo(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
 
     if (difference.inDays > 0) {
       return '${difference.inDays}일 전';

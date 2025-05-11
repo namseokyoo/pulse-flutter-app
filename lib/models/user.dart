@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class User {
   final String id;
@@ -82,16 +83,50 @@ class User {
 
   // JSON에서 객체 생성
   factory User.fromJson(Map<String, dynamic> json) {
+    // ID 필드 확인
+    final id = json['id'] as String? ?? '';
+
+    // 날짜 필드 처리
+    DateTime createdAt;
+    final createdAtValue = json['createdAt'];
+
+    if (createdAtValue is Timestamp) {
+      createdAt = createdAtValue.toDate();
+    } else if (createdAtValue is String) {
+      createdAt = DateTime.parse(createdAtValue);
+    } else {
+      createdAt = DateTime.now(); // 기본값
+    }
+
+    // 배열 필드 안전하게 처리
+    List<String> pulseIds = [];
+    if (json['pulseIds'] != null) {
+      if (json['pulseIds'] is List) {
+        pulseIds = List<String>.from(
+          (json['pulseIds'] as List).map((item) => item.toString()),
+        );
+      }
+    }
+
+    List<String> bookmarkedPulseIds = [];
+    if (json['bookmarkedPulseIds'] != null) {
+      if (json['bookmarkedPulseIds'] is List) {
+        bookmarkedPulseIds = List<String>.from(
+          (json['bookmarkedPulseIds'] as List).map((item) => item.toString()),
+        );
+      }
+    }
+
     return User(
-      id: json['id'],
-      username: json['username'],
-      email: json['email'],
-      name: json['name'],
-      profileImageUrl: json['profileImageUrl'],
-      createdAt: DateTime.parse(json['createdAt']),
-      pulseIds: List<String>.from(json['pulseIds'] ?? []),
-      bookmarkedPulseIds: List<String>.from(json['bookmarkedPulseIds'] ?? []),
-      reputation: json['reputation'] ?? 0,
+      id: id,
+      username: json['username'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      profileImageUrl: json['profileImageUrl'] as String?,
+      createdAt: createdAt,
+      pulseIds: pulseIds,
+      bookmarkedPulseIds: bookmarkedPulseIds,
+      reputation: json['reputation'] as int? ?? 0,
     );
   }
 }

@@ -33,31 +33,42 @@ class _LikedPulsesScreenState extends State<LikedPulsesScreen>
     super.dispose();
   }
 
-  void _loadInteractedPulses() {
+  Future<void> _loadInteractedPulses() async {
     setState(() {
       _isLoading = true;
     });
 
-    // 모든 펄스 가져오기
-    final allPulses = _pulseService.getAllPulses();
+    try {
+      // 모든 펄스 가져오기
+      final allPulses = await _pulseService.getAllPulses();
 
-    // 좋아요한 펄스만 필터링
-    final likedPulses =
-        allPulses
-            .where((pulse) => pulse.upvotes.contains(widget.userId))
-            .toList();
+      // 좋아요한 펄스만 필터링
+      final likedPulses =
+          allPulses
+              .where((pulse) => pulse.upvotes.contains(widget.userId))
+              .toList();
 
-    // 싫어요한 펄스만 필터링
-    final dislikedPulses =
-        allPulses
-            .where((pulse) => pulse.downvotes.contains(widget.userId))
-            .toList();
+      // 싫어요한 펄스만 필터링
+      final dislikedPulses =
+          allPulses
+              .where((pulse) => pulse.downvotes.contains(widget.userId))
+              .toList();
 
-    setState(() {
-      _likedPulses = likedPulses;
-      _dislikedPulses = dislikedPulses;
-      _isLoading = false;
-    });
+      if (mounted) {
+        setState(() {
+          _likedPulses = likedPulses;
+          _dislikedPulses = dislikedPulses;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('상호작용한 펄스 로드 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override

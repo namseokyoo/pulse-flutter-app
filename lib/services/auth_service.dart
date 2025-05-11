@@ -2,6 +2,7 @@ import '../models/user.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 /// 인증 관련 서비스 클래스
 class AuthService {
@@ -14,6 +15,7 @@ class AuthService {
   final firebase_auth.FirebaseAuth _firebaseAuth =
       firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // 현재 로그인한 사용자
   User? _currentUser;
@@ -39,17 +41,40 @@ class AuthService {
         if (doc.exists) {
           final userData = doc.data()!;
 
+          // createdAt 필드가 Timestamp 또는 String 타입일 수 있음
+          DateTime createdAt;
+          if (userData['createdAt'] is Timestamp) {
+            createdAt = (userData['createdAt'] as Timestamp).toDate();
+          } else if (userData['createdAt'] is String) {
+            createdAt = DateTime.parse(userData['createdAt']);
+          } else {
+            createdAt = DateTime.now(); // 기본값
+          }
+
+          // pulseIds와 bookmarkedPulseIds가 없을 경우 빈 배열로 처리
+          List<String> pulseIds = [];
+          List<String> bookmarkedPulseIds = [];
+
+          // 타입 안전하게 변환
+          if (userData['pulseIds'] != null) {
+            pulseIds = List<String>.from(userData['pulseIds']);
+          }
+
+          if (userData['bookmarkedPulseIds'] != null) {
+            bookmarkedPulseIds = List<String>.from(
+              userData['bookmarkedPulseIds'],
+            );
+          }
+
           _currentUser = User(
             id: firebaseUser.uid,
             email: firebaseUser.email ?? '',
             username: userData['username'] ?? '',
             name: userData['name'] ?? '',
             profileImageUrl: userData['profileImageUrl'],
-            createdAt: (userData['createdAt'] as Timestamp).toDate(),
-            pulseIds: List<String>.from(userData['pulseIds'] ?? []),
-            bookmarkedPulseIds: List<String>.from(
-              userData['bookmarkedPulseIds'] ?? [],
-            ),
+            createdAt: createdAt,
+            pulseIds: pulseIds,
+            bookmarkedPulseIds: bookmarkedPulseIds,
           );
 
           return _currentUser;
@@ -101,14 +126,51 @@ class AuthService {
         throw Exception('로그인 실패: 사용자 프로필을 찾을 수 없습니다');
       }
 
-      final userData = userDoc.data() as Map<String, dynamic>;
+      final userData = userDoc.data()!;
 
       if (kDebugMode) {
         print('Firestore 사용자 데이터: $userData');
       }
 
+      // 사용자 데이터 유효성 확인
+      if (userData['username'] == null || userData['name'] == null) {
+        throw Exception('로그인 실패: 사용자 데이터가 올바르지 않습니다');
+      }
+
+      // createdAt 필드 처리
+      DateTime createdAt;
+      if (userData['createdAt'] is Timestamp) {
+        createdAt = (userData['createdAt'] as Timestamp).toDate();
+      } else if (userData['createdAt'] is String) {
+        createdAt = DateTime.parse(userData['createdAt']);
+      } else {
+        createdAt = DateTime.now(); // 기본값
+      }
+
+      // 배열 필드 안전하게 변환
+      List<String> pulseIds = [];
+      List<String> bookmarkedPulseIds = [];
+
+      if (userData['pulseIds'] != null) {
+        pulseIds = List<String>.from(userData['pulseIds']);
+      }
+
+      if (userData['bookmarkedPulseIds'] != null) {
+        bookmarkedPulseIds = List<String>.from(userData['bookmarkedPulseIds']);
+      }
+
       // User 모델로 변환
-      _currentUser = User.fromJson(userData);
+      _currentUser = User(
+        id: userCredential.user!.uid,
+        email: email,
+        username: userData['username'],
+        name: userData['name'],
+        profileImageUrl: userData['profileImageUrl'],
+        createdAt: createdAt,
+        pulseIds: pulseIds,
+        bookmarkedPulseIds: bookmarkedPulseIds,
+        reputation: userData['reputation'] ?? 0,
+      );
 
       if (kDebugMode) {
         print('로그인 완료: ${_currentUser?.username}');
@@ -251,6 +313,124 @@ class AuthService {
       print('비밀번호 재설정 이메일이 $email로 전송되었습니다');
     }
     return;
+  }
+  
+  // Google 로그인 메서드
+  Future<void> signInWithGoogle() async {
+    try {
+      if (kDebugMode) {
+        print('Google 로그인 시작');
+      }
+      
+      // Google 로그인 과정 시작
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        throw Exception('Google 로그인이 취소되었습니다');
+      }
+      
+      // Google 인증 정보 획득
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      
+      // Firebase 인증 정보 생성
+      final credential = firebase_auth.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      
+      // Firebase에 인증
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      final firebaseUser = userCredential.user;
+      
+      if (firebaseUser == null) {
+        throw Exception('Google 로그인 실패: 사용자 정보를 찾을 수 없습니다');
+      }
+      
+      // Firestore에서 사용자 정보 확인 (기존 회원인지 체크)
+      final userDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
+      
+      if (!userDoc.exists) {
+        // 신규 회원일 경우 Firestore에 정보 저장
+        final now = DateTime.now();
+        final userData = {
+          'id': firebaseUser.uid,
+          'email': firebaseUser.email ?? '',
+          'username': firebaseUser.displayName ?? 'user_${firebaseUser.uid.substring(0, 5)}',
+          'name': firebaseUser.displayName ?? '사용자',
+          'profileImageUrl': firebaseUser.photoURL,
+          'createdAt': Timestamp.fromDate(now),
+          'pulseIds': <String>[],
+          'bookmarkedPulseIds': <String>[],
+          'reputation': 0,
+        };
+        
+        await _firestore.collection('users').doc(firebaseUser.uid).set(userData);
+        
+        if (kDebugMode) {
+          print('Google 로그인 신규 사용자 정보 저장 완료');
+        }
+        
+        // 현재 사용자 정보 설정
+        _currentUser = User(
+          id: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          username: userData['username'] as String,
+          name: userData['name'] as String,
+          profileImageUrl: firebaseUser.photoURL,
+          createdAt: now,
+          pulseIds: [],
+          bookmarkedPulseIds: [],
+          reputation: 0,
+        );
+      } else {
+        // 기존 회원일 경우 Firestore에서 데이터 가져오기
+        final userData = userDoc.data()!;
+        
+        // createdAt 필드 처리
+        DateTime createdAt;
+        if (userData['createdAt'] is Timestamp) {
+          createdAt = (userData['createdAt'] as Timestamp).toDate();
+        } else if (userData['createdAt'] is String) {
+          createdAt = DateTime.parse(userData['createdAt']);
+        } else {
+          createdAt = DateTime.now(); // 기본값
+        }
+        
+        // 배열 필드 안전하게 변환
+        List<String> pulseIds = [];
+        List<String> bookmarkedPulseIds = [];
+        
+        if (userData['pulseIds'] != null) {
+          pulseIds = List<String>.from(userData['pulseIds']);
+        }
+        
+        if (userData['bookmarkedPulseIds'] != null) {
+          bookmarkedPulseIds = List<String>.from(userData['bookmarkedPulseIds']);
+        }
+        
+        // 사용자 정보 설정
+        _currentUser = User(
+          id: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          username: userData['username'] as String,
+          name: userData['name'] as String,
+          profileImageUrl: firebaseUser.photoURL ?? userData['profileImageUrl'],
+          createdAt: createdAt,
+          pulseIds: pulseIds,
+          bookmarkedPulseIds: bookmarkedPulseIds,
+          reputation: userData['reputation'] ?? 0,
+        );
+        
+        if (kDebugMode) {
+          print('Google 로그인 기존 사용자 정보 로드 완료');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Google 로그인 오류: $e');
+      }
+      throw Exception('Google 로그인 실패: ${e.toString()}');
+    }
   }
 
   // 로그아웃 메서드

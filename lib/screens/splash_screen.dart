@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../main.dart';
+import '../routes.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -35,9 +35,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     // 3초 후 메인 화면으로 이동
     Timer(const Duration(seconds: 3), () {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainScreen()),
-      );
+      Routes.replaceWith(Routes.main);
     });
   }
 

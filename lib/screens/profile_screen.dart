@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../main.dart';
 import '../services/pulse_service.dart';
 import 'my_pulses_screen.dart';
 import 'liked_pulses_screen.dart';
 import 'account_security_screen.dart';
 import 'edit_profile_screen.dart';
 import 'help_support_screen.dart';
+import '../routes.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,6 +19,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final PulseService _pulseService = PulseService();
   bool _isLoading = false;
+  int _interactedPulsesCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInteractedPulsesCount();
+  }
+
+  // 사용자가 상호작용한 펄스 수 가져오기
+  Future<void> _loadInteractedPulsesCount() async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    try {
+      final allPulses = await _pulseService.getAllPulses();
+      final interactedPulses =
+          allPulses.where((pulse) {
+            return pulse.upvotes.contains(user.id) ||
+                pulse.downvotes.contains(user.id);
+          }).toList();
+
+      if (mounted) {
+        setState(() {
+          _interactedPulsesCount = interactedPulses.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('상호작용한 펄스 로드 오류: $e');
+    }
+  }
 
   Future<void> _logout() async {
     setState(() {
@@ -28,11 +58,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await _authService.logout();
       if (mounted) {
-        // 메인 화면으로 이동하되, 스택에 남아있는 모든 화면 제거
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-          (route) => false,
-        );
+        // 모든 화면을 제거하고 메인 화면으로 이동
+        Routes.clearStackAndNavigateTo(Routes.main);
       }
     } catch (e) {
       ScaffoldMessenger.of(
@@ -50,13 +77,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
-
-    // 사용자의 좋아요/싫어요한 펄스 수 계산
-    final interactedPulses =
-        _pulseService.getAllPulses().where((pulse) {
-          return pulse.upvotes.contains(user?.id) ||
-              pulse.downvotes.contains(user?.id);
-        }).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('마이페이지')),
@@ -164,7 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildMenuTile(
                       icon: Icons.thumb_up_alt_outlined,
                       title: '좋아요/싫어요한 펄스',
-                      subtitle: '${interactedPulses.length}개',
+                      subtitle: '$_interactedPulsesCount개',
                       onTap: () {
                         // 좋아요/싫어요한 펄스 목록 화면으로 이동
                         Navigator.push(
@@ -173,7 +193,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             builder:
                                 (context) => LikedPulsesScreen(userId: user.id),
                           ),
-                        );
+                        ).then((_) {
+                          // 돌아왔을 때 카운트 다시 로드
+                          _loadInteractedPulsesCount();
+                        });
                       },
                     ),
 
@@ -289,13 +312,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     if (mounted) {
                       // 삭제 성공 후 메인 화면으로 이동
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (context) => const MainScreen(),
-                        ),
-                        (route) => false,
-                      );
-
+                      Routes.clearStackAndNavigateTo(Routes.main);
+                      
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('계정이 성공적으로 삭제되었습니다')),
                       );

@@ -7,12 +7,23 @@ enum SortOption { latest, remainingAsc, remainingDesc }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  
+  // 외부에서 호출할 수 있는 메서드
+  void refreshData(BuildContext context) {
+    // HomeScreen의 상태를 찾아서 새로고침 메서드 호출
+    final state = context.findAncestorStateOfType<_HomeScreenState>();
+    if (state != null) {
+      state._loadPulses();
+    }
+  }
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final PulseService _pulseService = PulseService();
   List<Pulse> _pulses = [];
   SortOption _sortOption = SortOption.latest;
@@ -103,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Column(
       children: [
         // 정렬 옵션 버튼
