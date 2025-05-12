@@ -32,9 +32,17 @@ class PulseService {
   // 모든 펄스 가져오기
   Future<List<Pulse>> getAllPulses() async {
     try {
+      if (kDebugMode) {
+        print('Firestore에서 펄스 데이터 로드 시작');
+      }
+
       // 만료되지 않은 펄스만 가져오기
       final now = DateTime.now();
       final QuerySnapshot snapshot = await _pulsesCollection.get();
+
+      if (kDebugMode) {
+        print('Firestore 쿼리 성공: ${snapshot.docs.length}개의 문서 가져옴');
+      }
 
       List<Pulse> pulses = [];
       for (var doc in snapshot.docs) {
@@ -54,7 +62,7 @@ class PulseService {
           }
         } catch (e) {
           if (kDebugMode) {
-            print('Pulse 변환 중 오류: $e');
+            print('Pulse 변환 중 오류 (ID: ${doc.id}): $e');
           }
         }
       }
@@ -62,10 +70,15 @@ class PulseService {
       // 생성일시 기준 내림차순 정렬 (최신순)
       pulses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+      if (kDebugMode) {
+        print('펄스 데이터 로드 완료: ${pulses.length}개의 유효한 펄스');
+      }
+
       return pulses;
     } catch (e) {
       if (kDebugMode) {
         print('펄스 목록 로드 중 오류: $e');
+        print('오류 세부 정보: ${e.toString()}');
       }
       return [];
     }

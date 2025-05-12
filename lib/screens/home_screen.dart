@@ -5,23 +5,28 @@ import '../widgets/pulse_card.dart';
 
 enum SortOption { latest, remainingAsc, remainingDesc }
 
+// HomeScreen 상태에 접근하기 위한 싱글톤 패턴
+class HomeScreenState {
+  static final HomeScreenState _instance = HomeScreenState._internal();
+  factory HomeScreenState() => _instance;
+  HomeScreenState._internal();
+
+  _HomeScreenState? currentState;
+
+  void refreshData() {
+    currentState?._loadPulses();
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-  
-  // 외부에서 호출할 수 있는 메서드
-  void refreshData(BuildContext context) {
-    // HomeScreen의 상태를 찾아서 새로고침 메서드 호출
-    final state = context.findAncestorStateOfType<_HomeScreenState>();
-    if (state != null) {
-      state._loadPulses();
-    }
-  }
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   final PulseService _pulseService = PulseService();
@@ -32,17 +37,30 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
   @override
   void initState() {
     super.initState();
+    HomeScreenState().currentState = this;
     _loadPulses();
+  }
+
+  @override
+  void dispose() {
+    if (HomeScreenState().currentState == this) {
+      HomeScreenState().currentState = null;
+    }
+    super.dispose();
   }
 
   // 펄스 데이터 로드
   Future<void> _loadPulses() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       final pulses = await _pulseService.getAllPulses();
+      if (!mounted) return;
+
       setState(() {
         _pulses = pulses;
         _sortPulses(); // 정렬 적용
@@ -50,6 +68,8 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
       });
     } catch (e) {
       debugPrint('펄스 로드 오류: $e');
+      if (!mounted) return;
+
       setState(() {
         _isLoading = false;
       });
@@ -202,8 +222,16 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
               _loadPulses();
             },
             child:
-                _pulses.isEmpty
-                    ? const Center(child: Text('표시할 펄스가 없습니다'))
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _pulses.isEmpty
+                    ? ListView(
+                      children: const [
+                        SizedBox(height: 100),
+                        Center(child: Text('표시할 펄스가 없습니다')),
+                        SizedBox(height: 100),
+                      ],
+                    )
                     : ListView.builder(
                       itemCount: _pulses.length,
                       itemBuilder: (context, index) {

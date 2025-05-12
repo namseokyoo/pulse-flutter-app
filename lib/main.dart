@@ -69,17 +69,17 @@ void main() async {
 
 // 앱의 테마 색상 정의
 class AppColors {
-  static const Color primaryBlue = Color(0xFF2196F3);
-  static const Color primaryBlueLight = Color(0xFF64B5F6);
+  static const Color primaryBlue = Color(0xFFFF5252);
+  static const Color primaryBlueLight = Color(0xFFFF7B7B);
   static const Color accentRed = Color(0xFFFF5252);
-  static const Color accentBlue = Color(0xFF448AFF);
+  static const Color accentBlue = Color(0xFFFF5252);
   static const Color background = Color(0xFF121212);
   static const Color cardBackground = Color(0xFF1E1E1E);
   static const Color textPrimary = Colors.white;
   static const Color textSecondary = Color(0xFFB0B0B0);
   static const Color divider = Color(0xFF323232);
   static const Color critical = Color(0xFFFF5252);
-  static const Color normal = Color(0xFF448AFF);
+  static const Color normal = Color(0xFFFF5252);
 }
 
 class PulseApp extends StatelessWidget {
@@ -225,6 +225,12 @@ class _MainScreenState extends State<MainScreen> {
     const SettingsScreen(),
   ];
 
+  // 홈 화면 새로고침 함수
+  void _refreshHomeScreen() {
+    // 싱글톤을 통해 홈 화면 상태에 접근하여 새로고침
+    HomeScreenState().refreshData();
+  }
+
   void _onTabTapped(int index) {
     // 로그인 여부 확인
     final authService = AuthService();
@@ -265,17 +271,25 @@ class _MainScreenState extends State<MainScreen> {
             _currentIndex = 0;
           });
 
-          // 홈 화면 위젯 찾아서 데이터 새로고침
-          if (_screens[0] is HomeScreen) {
-            final homeScreen = _screens[0] as HomeScreen;
-            homeScreen.refreshData(context);
-          }
+          // 홈 화면 데이터 새로고침
+          _refreshHomeScreen();
+
+          // 디버그 확인용 로그
+          debugPrint('펄스 작성 완료 후 홈 화면 새로고침 요청');
         }
       });
     } else {
       setState(() {
         _currentIndex = index;
       });
+
+      // 홈 화면으로 돌아오면 새로고침
+      if (index == 0) {
+        _refreshHomeScreen();
+
+        // 디버그 확인용 로그
+        debugPrint('홈 탭 선택 - 새로고침 요청');
+      }
     }
   }
 

@@ -13,6 +13,7 @@ class CreatePulseScreen extends StatefulWidget {
 }
 
 class _CreatePulseScreenState extends State<CreatePulseScreen> {
+  final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   final PulseService _pulseService = PulseService();
   bool _isSubmitting = false;
@@ -24,6 +25,7 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
 
   @override
   void dispose() {
+    _titleController.dispose();
     _contentController.dispose();
     super.dispose();
   }
@@ -59,7 +61,18 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
   }
 
   void _savePulse() {
+    final title = _titleController.text.trim();
     final content = _contentController.text.trim();
+
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('제목을 입력해주세요'),
+          backgroundColor: AppColors.accentRed,
+        ),
+      );
+      return;
+    }
 
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,14 +97,16 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
       }
 
       _pulseService.createPulse(
-        title: content.split('\n').first, // 첫 줄을 제목으로 사용
+        title: title,
         content: content,
         author: '사용자', // 실제 사용자 정보로 대체 가능
         imageUrl: imageUrl,
         duration: _pulseDuration,
       );
 
+      debugPrint('펄스 작성 완료, 홈 화면으로 돌아가기 전');
       Routes.goBack(true); // true는 변경이 있었음을 나타냄
+      debugPrint('펄스 작성 완료, 홈 화면으로 돌아간 후'); // 이 로그는 화면이 전환되면 표시되지 않을 수 있음
     } catch (e) {
       // 에러 처리
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,6 +151,33 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 제목 입력 필드
+                  TextField(
+                    controller: _titleController,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: '제목을 입력하세요...',
+                      hintStyle: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      border: InputBorder.none,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 구분선
+                  const Divider(height: 1, thickness: 1),
+
+                  const SizedBox(height: 16),
+
                   // 에디터
                   Expanded(
                     child: TextField(
@@ -147,7 +189,7 @@ class _CreatePulseScreenState extends State<CreatePulseScreen> {
                         color: AppColors.textPrimary,
                       ),
                       decoration: const InputDecoration(
-                        hintText: 'Write your Pulse here...',
+                        hintText: '내용을 입력하세요...',
                         hintStyle: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 18,
